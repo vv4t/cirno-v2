@@ -18,7 +18,7 @@ static op_set_t op_set_table[] = {
 
 static int num_op_set = sizeof(op_set_table) / sizeof(op_set_t);
 
-void s_error(const char *fmt, ...);
+static const lexeme_t *s_expect(lex_t *lex, token_t token);
 
 static s_node_t *s_body(lex_t *lex);
 static s_node_t *s_stmt(lex_t *lex);
@@ -88,14 +88,18 @@ static s_node_t *s_body(lex_t *lex)
 static s_node_t *s_stmt(lex_t *lex)
 {
   s_node_t *node = NULL;
-  
-  if ((node = s_decl(lex))) {
-    lex_match(lex, ';');
+ 
+  node = s_decl(lex); 
+  if (node) {
+    if (!s_expect(lex, ';'))
+      return NULL;
     return node;
   }
-
-  if ((node = s_expr(lex))) {
-    lex_match(lex, ';');
+  
+  node = s_expr(lex);
+  if (node) {
+    if (!s_expect(lex, ';'))
+      return NULL;
     return node;
   }
   
@@ -111,18 +115,11 @@ static s_node_t *s_decl(lex_t *lex)
   
   const lexeme_t *ident = lex_match(lex, TK_IDENTIFIER);
   
-  if (!ident) {
-    LOG_ERROR("expected identifier");
-    return NULL;
-  }
-  
   const s_node_t *init = NULL;
-  
   if (lex_match(lex, '=')) {
     init = s_expr(lex);
-    
     if (!init) {
-      LOG_ERROR("expected initializer after '='");
+      lex_printf(lex, lex->lexeme, "error: expected expression before '%l'");
       return NULL;
     }
   }
@@ -158,6 +155,11 @@ static s_node_t *s_binop(lex_t *lex, int op_set)
     const lexeme_t *op = NULL;
     if ((op = lex_match(lex, op_set_table[op_set].op[i]))) {
       s_node_t *rhs = s_binop(lex, op_set);
+      if (!rhs) {
+        lex_printf(lex, lex->lexeme, "error: expected expression before '%l'");
+        return NULL;
+      }
+      
       return make_binop(lhs, op, rhs);
     }
   }
@@ -175,8 +177,31 @@ static s_node_t *s_primary(lex_t *lex)
     return make_constant(lexeme);
   else if ((lexeme = lex_match(lex, TK_IDENTIFIER)))
     return make_constant(lexeme);
+  else if (lex_match(lex, '(')) {
+    s_node_t *body = s_expr(lex);
+    
+    if (!body) {
+      lex_printf(lex, lex->lexeme, "error: expected expression before '%l'");
+      return NULL;
+    }
+    
+    if (!s_expect(lex, ')'))
+      return NULL;
+    
+    return body;
+  }
   
   return NULL;
+}
+
+static const lexeme_t *s_expect(lex_t *lex, token_t token)
+{
+  const lexeme_t *lexeme = lex_match(lex, token);
+  
+  if (!lexeme)
+    lex_printf(lex, lex->lexeme, "error: expected '%t' before '%l'", token);
+  
+  return lexeme;
 }
 
 static s_node_t *make_stmt(const s_node_t *body, const s_node_t *next)

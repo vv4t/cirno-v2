@@ -1,6 +1,8 @@
 #ifndef LEX_H
 #define LEX_H
 
+#include <stdarg.h>
+
 typedef enum {
   TK_CONST_INTEGER = 256,
   TK_CONST_FLOAT,
@@ -16,14 +18,18 @@ typedef struct lexeme_s {
     float       f32;
     const char  *ident;
   } data;
+  int             line;
   struct lexeme_s *next;
 } lexeme_t;
 
 typedef struct {
-  const lexeme_t *curr_lexeme;
+  const char      *src;
+  const lexeme_t  *lexeme;
+  int             eof_line;
 } lex_t;
 
-extern lex_t lex_parse(const char *src);
+extern lex_t          lex_parse(const char *src);
+extern void           lex_printf(const lex_t *lex, const lexeme_t *lexeme, const char *fmt, ...);
 extern const lexeme_t *lex_match(lex_t *lex, token_t);
 
 #endif
