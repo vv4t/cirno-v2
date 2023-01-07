@@ -11,8 +11,7 @@ int main(int argc, char *argv[])
   lex_t lex = lex_parse("main.cn");
   s_node_t *s_tree = s_parse(&lex);
   s_print(s_tree);
-  
-  // interpret(ast_expr);
+  interpret(s_tree);
   
   // lex_free(&lex);
   

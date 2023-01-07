@@ -8,7 +8,8 @@ typedef enum {
   TK_CONST_FLOAT,
   TK_IDENTIFIER,
   TK_I32,
-  TK_F32
+  TK_F32,
+  TK_EOF
 } token_t;
 
 typedef struct lexeme_s {
@@ -19,6 +20,7 @@ typedef struct lexeme_s {
     const char  *ident;
   } data;
   int             line;
+  const char      *src;
   struct lexeme_s *next;
 } lexeme_t;
 
@@ -29,7 +31,7 @@ typedef struct {
 } lex_t;
 
 extern lex_t          lex_parse(const char *src);
-extern void           lex_printf(const lex_t *lex, const lexeme_t *lexeme, const char *fmt, ...);
+extern void           lex_printf(const lexeme_t *lexeme, const char *fmt, ...);
 extern const lexeme_t *lex_match(lex_t *lex, token_t);
 
 #endif

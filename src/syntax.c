@@ -119,7 +119,7 @@ static s_node_t *s_decl(lex_t *lex)
   if (lex_match(lex, '=')) {
     init = s_expr(lex);
     if (!init) {
-      lex_printf(lex, lex->lexeme, "error: expected expression before '%l'");
+      lex_printf(lex->lexeme, "error: expected expression before '%l'");
       return NULL;
     }
   }
@@ -156,7 +156,7 @@ static s_node_t *s_binop(lex_t *lex, int op_set)
     if ((op = lex_match(lex, op_set_table[op_set].op[i]))) {
       s_node_t *rhs = s_binop(lex, op_set);
       if (!rhs) {
-        lex_printf(lex, lex->lexeme, "error: expected expression before '%l'");
+        lex_printf(lex->lexeme, "error: expected expression before '%l'");
         return NULL;
       }
       
@@ -181,7 +181,7 @@ static s_node_t *s_primary(lex_t *lex)
     s_node_t *body = s_expr(lex);
     
     if (!body) {
-      lex_printf(lex, lex->lexeme, "error: expected expression before '%l'");
+      lex_printf(lex->lexeme, "error: expected expression before '%l'");
       return NULL;
     }
     
@@ -199,7 +199,7 @@ static const lexeme_t *s_expect(lex_t *lex, token_t token)
   const lexeme_t *lexeme = lex_match(lex, token);
   
   if (!lexeme)
-    lex_printf(lex, lex->lexeme, "error: expected '%t' before '%l'", token);
+    lex_printf(lex->lexeme, "error: expected '%t' before '%l'", token);
   
   return lexeme;
 }

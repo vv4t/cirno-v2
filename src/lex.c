@@ -6,6 +6,7 @@
 #include <string.h>
 
 typedef struct {
+  const char  *file;
   const char  *src;
   const char  *c;
   int         line;
@@ -65,6 +66,7 @@ lex_t lex_parse(const char *src)
   fclose(fp);
   
   lex_file_t lex_file = {
+    .file = src,
     .src = buffer,
     .c = buffer,
     .line = 1
@@ -100,6 +102,8 @@ lex_t lex_parse(const char *src)
     }
   }
   
+  head->next = make_lexeme(TK_EOF, &lex_file);
+  
   lex_t lex = {
     .src = src,
     .lexeme = body,
@@ -109,12 +113,12 @@ lex_t lex_parse(const char *src)
   return lex;
 }
 
-void lex_printf(const lex_t *lex, const lexeme_t *lexeme, const char *fmt, ...)
+void lex_printf(const lexeme_t *lexeme, const char *fmt, ...)
 {
-  if (lexeme)
-    printf("%s:%i:", lex->src, lexeme->line);
-  else
-    printf("%s:%i:", lex->src, lex->eof_line);
+  if (!lexeme)
+    return;
+  
+  printf("%s:%i:", lexeme->src, lexeme->line);
   
   va_list args;
   va_start(args, fmt);
@@ -160,6 +164,7 @@ static lexeme_t *make_lexeme(token_t token, const lex_file_t *lex)
   lexeme_t *lexeme = malloc(sizeof(lexeme_t));
   lexeme->token = token;
   lexeme->line = lex->line;
+  lexeme->src = lex->file;
   lexeme->next = NULL;
   return lexeme;
 }
@@ -265,12 +270,13 @@ static void token_print(token_t token)
     "float",      // TK_CONST_FLOAT
     "identifier", // TK_IDENTIFIER
     "i32",        // TK_I32
-    "f32",        // TK_F32
+    "f32",        // TK_F32,
+    "EOF",        // TK_EOF
   };
   
   if (token < TK_CONST_INTEGER) {
     printf("%c", token);
-  } else if (token <= TK_F32) {
+  } else if (token <= TK_EOF) {
     printf("%s", str_token_table[token - TK_CONST_INTEGER]);
   } else {
     printf("(unknown:%i)", token);
