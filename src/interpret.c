@@ -20,22 +20,17 @@ typedef struct {
 } expr_t;
 
 typedef struct var_s {
-  type_t      type;
-  expr_t      expr;
-  const char  *ident;
-  var_s       *next;
+  type_t        type;
+  expr_t        expr;
+  const char    *ident;
+  struct var_s  *next;
 } var_t;
-
-typedef struct {
-  var_t var[1021];
-} sym_t;
-
-static var_t *sym_find(sym_t *sym, const char *ident);
 
 static void expr_print(const expr_t *expr);
 
-static void int_stmt(const s_node_t *node);
-static void int_decl(const s_node_t *node);
+static void   int_stmt(const s_node_t *node);
+static void   int_decl(const s_node_t *node);
+static type_t int_type(const s_node_t *node);
 static expr_t int_expr(const s_node_t *node);
 static expr_t int_binop(const s_node_t *node);
 static expr_t int_constant(const s_node_t *node);
@@ -63,7 +58,23 @@ void int_stmt(const s_node_t *node)
 
 void int_decl(const s_node_t *node)
 {
+  type_t type = int_type(node->decl.type);
+  var_t *var = 
+}
+
+type_t int_type(const s_node_t *node)
+{
+  type_t type;
+  switch (node->type.spec->token) {
+  case TK_I32;
+    type.spec = SPEC_I32;
+    break;
+  case TK_F32:
+    type.spec = SPEC_F32;
+    break;
+  }
   
+  return type;
 }
 
 expr_t int_expr(const s_node_t *node)
