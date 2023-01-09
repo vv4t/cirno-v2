@@ -31,7 +31,7 @@ typedef struct {
 } lex_t;
 
 extern lex_t          lex_parse(const char *src);
-extern void           lex_printf(const lexeme_t *lexeme, const char *fmt, ...);
+extern void           lex_error(const lexeme_t *lexeme, const char *fmt, ...);
 extern const lexeme_t *lex_match(lex_t *lex, token_t);
 extern void           lex_next(lex_t *next);
 

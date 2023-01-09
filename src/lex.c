@@ -48,6 +48,7 @@ static lexeme_t *match_word(lex_file_t *lex);
 static lexeme_t *match_op(lex_file_t *lex);
 static void     token_print(token_t token);
 static void     lexeme_print(const lexeme_t *lexeme);
+static void     lex_printf(const lexeme_t *lexeme, const char *fmt, va_list args)
 
 lex_t lex_parse(const char *src)
 {
@@ -113,7 +114,7 @@ lex_t lex_parse(const char *src)
   return lex;
 }
 
-void lex_printf(const lexeme_t *lexeme, const char *fmt, ...)
+static void lex_printf(const lexeme_t *lexeme, const char *fmt, va_list args)
 {
   if (!lexeme)
     return;
