@@ -132,6 +132,8 @@ void lex_printf(const lexeme_t *lexeme, const char *fmt, ...)
       case 'l':
         lexeme_print(lexeme);
         break;
+      case 's':
+        printf("%s", va_arg(args, char*));
       }
       
       *++fmt;
@@ -142,6 +144,14 @@ void lex_printf(const lexeme_t *lexeme, const char *fmt, ...)
   
   va_end(args);
   putc('\n', stdout);
+}
+
+void lex_next(lex_t *lex)
+{
+  if (!lex->lexeme)
+    return;
+  
+  lex->lexeme = lex->lexeme->next;
 }
 
 const lexeme_t *lex_match(lex_t *lex, token_t token)

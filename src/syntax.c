@@ -5,6 +5,9 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
+
+static bool s_err = false;
 
 typedef struct {
   token_t op[8];
@@ -28,14 +31,25 @@ static s_node_t *s_expr(lex_t *lex);
 static s_node_t *s_binop(lex_t *lex, int op_set);
 static s_node_t *s_primary(lex_t *lex);
 
-static s_node_t *make_stmt(const s_node_t *body, const s_node_t *next);
-static s_node_t *make_decl(const s_node_t *type, const lexeme_t *ident, const s_node_t *init);
+typedef enum {
+  R_STMT,
+  R_DECL,
+  R_TYPE,
+  R_EXPR
+} rule_t;
+
+typedef s_node_t *(*s_rule_t)(lex_t *lex);
+
+static s_node_t *s_expect_rule(lex_t *lex, rule_t rule);
+
+static s_node_t *make_stmt(s_node_t *body, s_node_t *next);
+static s_node_t *make_decl(s_node_t *type, const lexeme_t *ident, s_node_t *init);
 static s_node_t *make_type(const lexeme_t *spec);
 static s_node_t *make_constant(const lexeme_t *lexeme);
-static s_node_t *make_binop(const s_node_t *lhs, const lexeme_t *op, const s_node_t *rhs);
+static s_node_t *make_binop(s_node_t *lhs, const lexeme_t *op, s_node_t *rhs);
 static s_node_t *make_node(s_node_type_t type);
 
-static void s_print_R(const s_node_t *node, int pad)
+static void s_print_R(s_node_t *node, int pad)
 {
   if (!node) {
     LOG_DEBUG("%*s", pad, "-");
@@ -67,7 +81,7 @@ static void s_print_R(const s_node_t *node, int pad)
   }
 }
 
-void s_print(const s_node_t *s_tree)
+void s_print(s_node_t *s_tree)
 {
   s_print_R(s_tree, 0);
 }
@@ -79,7 +93,7 @@ s_node_t *s_parse(lex_t *lex)
 
 static s_node_t *s_body(lex_t *lex)
 {
-  const s_node_t *body = s_stmt(lex);
+  s_node_t *body = s_stmt(lex);
   if (body)
     return make_stmt(body, s_body(lex));
   return NULL;
@@ -108,20 +122,18 @@ static s_node_t *s_stmt(lex_t *lex)
 
 static s_node_t *s_decl(lex_t *lex)
 {
-  const s_node_t *type = s_type(lex);
-  
+  s_node_t *type = s_type(lex);
   if (!type)
     return NULL;
   
-  const lexeme_t *ident = lex_match(lex, TK_IDENTIFIER);
+  const lexeme_t *ident = s_expect(lex, TK_IDENTIFIER);
+  if (!ident)
+    return NULL;
   
-  const s_node_t *init = NULL;
+  s_node_t *init = NULL;
   if (lex_match(lex, '=')) {
-    init = s_expr(lex);
-    if (!init) {
-      lex_printf(lex->lexeme, "error: expected expression before '%l'");
+    if (!(init = s_expect_rule(lex, R_EXPR)))
       return NULL;
-    }
   }
   
   return make_decl(type, ident, init);
@@ -150,13 +162,15 @@ static s_node_t *s_binop(lex_t *lex, int op_set)
     return s_primary(lex);
   
   s_node_t *lhs = s_binop(lex, op_set + 1);
+  if (!lhs)
+    return NULL;
   
   for (int i = 0; i < 8; i++) {
     const lexeme_t *op = NULL;
     if ((op = lex_match(lex, op_set_table[op_set].op[i]))) {
       s_node_t *rhs = s_binop(lex, op_set);
       if (!rhs) {
-        lex_printf(lex->lexeme, "error: expected expression before '%l'");
+        lex_printf(lex->lexeme, "error: expected 'expression' before '%l'");
         return NULL;
       }
       
@@ -178,12 +192,9 @@ static s_node_t *s_primary(lex_t *lex)
   else if ((lexeme = lex_match(lex, TK_IDENTIFIER)))
     return make_constant(lexeme);
   else if (lex_match(lex, '(')) {
-    s_node_t *body = s_expr(lex);
-    
-    if (!body) {
-      lex_printf(lex->lexeme, "error: expected expression before '%l'");
+    s_node_t *body = s_expect_rule(lex, R_EXPR);
+    if (!body)
       return NULL;
-    }
     
     if (!s_expect(lex, ')'))
       return NULL;
@@ -192,6 +203,30 @@ static s_node_t *s_primary(lex_t *lex)
   }
   
   return NULL;
+}
+
+static s_node_t *s_expect_rule(lex_t *lex, rule_t rule)
+{
+  static s_rule_t s_rule_table[] = {
+    s_stmt, // R_STMT
+    s_decl, // R_DECL
+    s_type, // R_TYPE
+    s_expr  // R_EXPR
+  };
+  
+  static const char *str_rule_table[] = {
+    "statement",    // R_STMT
+    "declaration",  // R_DECL
+    "type",         // R_TYPE
+    "expression"    // R_EXPR
+  };
+  
+  s_node_t *node = s_rule_table[rule](lex);
+  
+  if (!node)
+    lex_printf(lex->lexeme, "error: expected '%s' before '%l'", str_rule_table[rule]);
+  
+  return node;
 }
 
 static const lexeme_t *s_expect(lex_t *lex, token_t token)
@@ -204,7 +239,7 @@ static const lexeme_t *s_expect(lex_t *lex, token_t token)
   return lexeme;
 }
 
-static s_node_t *make_stmt(const s_node_t *body, const s_node_t *next)
+static s_node_t *make_stmt(s_node_t *body, s_node_t *next)
 {
   s_node_t *node = make_node(S_STMT);
   node->stmt.body = body;
@@ -212,7 +247,7 @@ static s_node_t *make_stmt(const s_node_t *body, const s_node_t *next)
   return node;
 }
 
-static s_node_t *make_decl(const s_node_t *type, const lexeme_t *ident, const s_node_t *init)
+static s_node_t *make_decl(s_node_t *type, const lexeme_t *ident, s_node_t *init)
 {
   s_node_t *node = make_node(S_DECL);
   node->decl.type = type;
@@ -228,7 +263,7 @@ static s_node_t *make_type(const lexeme_t *spec)
   return node;
 }
 
-static s_node_t *make_binop(const s_node_t *lhs, const lexeme_t *op, const s_node_t *rhs)
+static s_node_t *make_binop(s_node_t *lhs, const lexeme_t *op, s_node_t *rhs)
 {
   s_node_t *node = make_node(S_BINOP);
   node->binop.lhs = lhs;
