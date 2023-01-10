@@ -13,7 +13,7 @@ int main(int argc, char *argv[])
   s_print(s_tree);
   expr_t expr = int_shell(s_tree);
   
-  // c_debug("%w", &expr);
+  c_debug("%w", &expr);
   // lex_free(&lex);
   
   return 0;

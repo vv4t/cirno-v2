@@ -6,10 +6,12 @@
 #include <stdbool.h>
 
 static type_t type_i32 = { .spec = SPEC_I32, .size = 0 };
-static type_t type_f32 = { .spec = SPEC_I32, .size = 0 };
+static type_t type_f32 = { .spec = SPEC_F32, .size = 0 };
 
 static bool type_cmp(const type_t *a, const type_t *b);
-static bool type_lvalue(const type_t *type);
+static int  type_size_base(const type_t *type);
+
+static bool expr_lvalue(const expr_t *expr);
 
 static void   int_stmt(map_t scope, const s_node_t *node);
 static void   int_decl(map_t scope, const s_node_t *node);
@@ -18,7 +20,10 @@ static expr_t int_expr(map_t scope, const s_node_t *node);
 static expr_t int_binop(map_t scope, const s_node_t *node);
 static expr_t int_constant(map_t scope, const s_node_t *node);
 
-static unsigned int int_mem_stack[128];
+static int mem_stack[128];
+static int mem_ptr = 0;
+
+static int *mem_alloc(int size);
 
 expr_t int_shell(const s_node_t *node)
 {
@@ -52,6 +57,7 @@ void int_decl(map_t scope, const s_node_t *node)
   
   var_t *var = malloc(sizeof(var_t));
   var->type = int_type(scope, node->decl.type);
+  var->expr = (expr_t) { 0 };
   
   if (node->decl.init) {
     var->expr = int_expr(scope, node->decl.init);
@@ -61,10 +67,12 @@ void int_decl(map_t scope, const s_node_t *node)
         "incompatible types: initializing '%z' using '%z'",
         &var->type, &var->expr.type);
     }
-  } else {
-    var->expr = (expr_t) { 0 };
-    var->expr.lvalue.var = var;
+  } else if (var->type.size > 0) {
+    var->expr.type = var->type;
+    var->expr.mem = mem_alloc(var->type.size * type_size_base(&var->expr.type));
   }
+  
+  var->expr.lvalue.var = var;
   
   map_put(scope, node->decl.ident->data.ident, var);
 }
@@ -105,14 +113,6 @@ expr_t int_binop(map_t scope, const s_node_t *node)
   expr_t lhs = int_expr(scope, node->binop.lhs);
   expr_t rhs = int_expr(scope, node->binop.rhs);
   
-  switch (node->binop.op->token) {
-  case '=':
-    if (!type_lvalue(&lhs.type))
-      c_error(node->binop.op, "lvalue required as left operand of assignment");
-    *lhs.lvalue.var = rhs;
-    break;
-  }
-  
   expr_t expr = { 0 };
   if (type_cmp(&lhs.type, &type_i32) && type_cmp(&rhs.type, &type_i32)) {
     switch (node->binop.op->token) {
@@ -128,10 +128,16 @@ expr_t int_binop(map_t scope, const s_node_t *node)
     case '/':
       expr.i32 = lhs.i32 / rhs.i32;
       break;
+    case '=':
+      if (!expr_lvalue(&lhs))
+        c_error(node->binop.op, "lvalue required as left operand of assignment");
+      lhs.lvalue.var->expr.i32 = rhs.i32;
+      expr = lhs.lvalue.var->expr;
+      break;
     default:
       goto err_no_op; // lol lmao
     }
-    expr.type.spec = SPEC_I32;
+    expr.type = type_i32;
   } if (type_cmp(&lhs.type, &type_f32) && type_cmp(&rhs.type, &type_f32)) {
     switch (node->binop.op->token) {
     case '+':
@@ -146,10 +152,16 @@ expr_t int_binop(map_t scope, const s_node_t *node)
     case '/':
       expr.f32 = lhs.f32 / rhs.f32;
       break;
+    case '=':
+      if (!expr_lvalue(&lhs))
+        c_error(node->binop.op, "lvalue required as left operand of assignment");
+      lhs.lvalue.var->expr.f32 = rhs.f32;
+      expr = lhs.lvalue.var->expr;
+      break;
     default:
       goto err_no_op; // lol lmao
     }
-    expr.type.spec = SPEC_F32;
+    expr.type = type_f32;
   } else {
 err_no_op: // i actually used a goto lol
     c_error(
@@ -197,7 +209,24 @@ static bool type_cmp(const type_t *a, const type_t *b)
   return a->spec == b->spec && a->size == b->size;
 }
 
-static bool type_lvalue(const type_t *type)
+static bool expr_lvalue(const expr_t *expr)
 {
+  return expr->lvalue.var != NULL;
+}
   
+static int type_size_base(const type_t *type)
+{
+  switch (type->spec) {
+  case SPEC_I32:
+    return 4;
+  case SPEC_F32:
+    return 4;
+  }
+}
+
+static int *mem_alloc(int size)
+{
+  int *block = &mem_stack[mem_ptr];
+  mem_ptr += (size + 3) / 4;
+  return block;
 }

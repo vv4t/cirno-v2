@@ -167,12 +167,12 @@ static s_node_t *s_binop(lex_t *lex, int op_set)
   
   for (int i = 0; i < 8; i++) {
     const lexeme_t *op = NULL;
-    if ((op = lex_match(lex, op_set_table[op_set].op[i]))) {
-      s_node_t *rhs = s_binop(lex, op_set);
+    while ((op = lex_match(lex, op_set_table[op_set].op[i]))) {
+      s_node_t *rhs = s_binop(lex, op_set + 1);
       if (!rhs)
         c_error(lex->lexeme, "error: expected 'expression' before '%l'", lex->lexeme);
       
-      return make_binop(lhs, op, rhs);
+      lhs = make_binop(lhs, op, rhs);
     }
   }
   
