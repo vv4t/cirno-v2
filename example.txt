@@ -1,7 +1,7 @@
 i32 test;
 f32 test;
 
-f32 test;
+f32[] test;
 
 int main(i32 a, i32 b)
 {

@@ -44,7 +44,7 @@ static s_node_t *s_expect_rule(lex_t *lex, rule_t rule);
 
 static s_node_t *make_stmt(s_node_t *body, s_node_t *next);
 static s_node_t *make_decl(s_node_t *type, const lexeme_t *ident, s_node_t *init);
-static s_node_t *make_type(const lexeme_t *spec);
+static s_node_t *make_type(const lexeme_t *spec, s_node_t *size);
 static s_node_t *make_constant(const lexeme_t *lexeme);
 static s_node_t *make_binop(s_node_t *lhs, const lexeme_t *op, s_node_t *rhs);
 static s_node_t *make_node(s_node_type_t type);
@@ -105,15 +105,13 @@ static s_node_t *s_stmt(lex_t *lex)
  
   node = s_decl(lex); 
   if (node) {
-    if (!s_expect(lex, ';'))
-      return NULL;
+    s_expect(lex, ';');
     return node;
   }
   
   node = s_expr(lex);
   if (node) {
-    if (!s_expect(lex, ';'))
-      return NULL;
+    s_expect(lex, ';');
     return node;
   }
   
@@ -127,14 +125,10 @@ static s_node_t *s_decl(lex_t *lex)
     return NULL;
   
   const lexeme_t *ident = s_expect(lex, TK_IDENTIFIER);
-  if (!ident)
-    return NULL;
   
   s_node_t *init = NULL;
-  if (lex_match(lex, '=')) {
-    if (!(init = s_expect_rule(lex, R_EXPR)))
-      return NULL;
-  }
+  if (lex_match(lex, '='))
+    init = s_expect_rule(lex, R_EXPR);
   
   return make_decl(type, ident, init);
 }
@@ -148,7 +142,13 @@ static s_node_t *s_type(lex_t *lex)
   else
     return NULL;
   
-  return make_type(spec);
+  s_node_t *size = NULL;
+  if (lex_match(lex, '[')) {
+    size = s_expect_rule(lex, R_EXPR);
+    s_expect(lex, ']');
+  }
+  
+  return make_type(spec, size);
 }
 
 static s_node_t *s_expr(lex_t *lex)
@@ -169,10 +169,8 @@ static s_node_t *s_binop(lex_t *lex, int op_set)
     const lexeme_t *op = NULL;
     if ((op = lex_match(lex, op_set_table[op_set].op[i]))) {
       s_node_t *rhs = s_binop(lex, op_set);
-      if (!rhs) {
-        lex_printf(lex->lexeme, "error: expected 'expression' before '%l'");
-        return NULL;
-      }
+      if (!rhs)
+        c_error(lex->lexeme, "error: expected 'expression' before '%l'", lex->lexeme);
       
       return make_binop(lhs, op, rhs);
     }
@@ -193,12 +191,7 @@ static s_node_t *s_primary(lex_t *lex)
     return make_constant(lexeme);
   else if (lex_match(lex, '(')) {
     s_node_t *body = s_expect_rule(lex, R_EXPR);
-    if (!body)
-      return NULL;
-    
-    if (!s_expect(lex, ')'))
-      return NULL;
-    
+    s_expect(lex, ')');
     return body;
   }
   
@@ -224,7 +217,7 @@ static s_node_t *s_expect_rule(lex_t *lex, rule_t rule)
   s_node_t *node = s_rule_table[rule](lex);
   
   if (!node)
-    lex_printf(lex->lexeme, "error: expected '%s' before '%l'", str_rule_table[rule]);
+    c_error(lex->lexeme, "error: expected '%s' before '%l'", str_rule_table[rule], lex->lexeme);
   
   return node;
 }
@@ -234,7 +227,7 @@ static const lexeme_t *s_expect(lex_t *lex, token_t token)
   const lexeme_t *lexeme = lex_match(lex, token);
   
   if (!lexeme)
-    lex_printf(lex->lexeme, "error: expected '%t' before '%l'", token);
+    c_error(lex->lexeme, "error: expected '%t' before '%l'", token, lex->lexeme);
   
   return lexeme;
 }
@@ -256,10 +249,11 @@ static s_node_t *make_decl(s_node_t *type, const lexeme_t *ident, s_node_t *init
   return node;
 }
 
-static s_node_t *make_type(const lexeme_t *spec)
+static s_node_t *make_type(const lexeme_t *spec, s_node_t *size)
 {
   s_node_t *node = make_node(S_TYPE);
   node->type.spec = spec;
+  node->type.size = size;
   return node;
 }
 

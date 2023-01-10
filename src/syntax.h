@@ -22,6 +22,7 @@ typedef struct s_node_s {
     } constant;
     struct {
       const lexeme_t  *spec;
+      struct s_node_s *size;
     } type;
     struct {
       struct s_node_s *type;

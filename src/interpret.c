@@ -3,31 +3,12 @@
 #include "log.h"
 #include "map.h"
 #include <stdlib.h>
+#include <stdbool.h>
 
-typedef enum {
-  SPEC_I32,
-  SPEC_F32
-} spec_t;
+static type_t type_i32 = { .spec = SPEC_I32, .size = 0 };
+static type_t type_f32 = { .spec = SPEC_I32, .size = 0 };
 
-typedef struct {
-  spec_t spec;
-} type_t;
-
-typedef struct {
-  union {
-    int   i32;
-    float f32;
-  };
-  type_t type;
-} expr_t;
-
-typedef struct var_s {
-  type_t        type;
-  expr_t        expr;
-  struct var_s  *next;
-} var_t;
-
-static void expr_print(const expr_t *expr);
+static bool type_cmp(const type_t *a, const type_t *b);
 
 static void   int_stmt(map_t scope, const s_node_t *node);
 static void   int_decl(map_t scope, const s_node_t *node);
@@ -36,41 +17,51 @@ static expr_t int_expr(map_t scope, const s_node_t *node);
 static expr_t int_binop(map_t scope, const s_node_t *node);
 static expr_t int_constant(map_t scope, const s_node_t *node);
 
-void interpret(const s_node_t *node)
+static unsigned int int_mem_stack[128];
+
+expr_t int_shell(const s_node_t *node)
 {
   map_t scope = map_new();
-  if (node)
-    int_stmt(scope, node);
-}
-
-void int_stmt(map_t scope, const s_node_t *node)
-{
+  
   expr_t expr;
-  switch (node->stmt.body->node_type) {
-  case S_BINOP:
-  case S_CONSTANT:
-    expr = int_expr(scope, node->stmt.body);
-    expr_print(&expr);
-    break;
-  case S_DECL:
-    int_decl(scope, node->stmt.body);
-    break;
+  const s_node_t *head = node;
+  while (head) {
+    switch (head->stmt.body->node_type) {
+    case S_BINOP:
+    case S_CONSTANT:
+      expr = int_expr(scope, head->stmt.body);
+      break;
+    case S_DECL:
+      int_decl(scope, head->stmt.body);
+      break;
+    }
+    head = head->stmt.next;
   }
   
-  if (node->stmt.next)
-    int_stmt(scope, node->stmt.next);
+  return expr;
 }
 
 void int_decl(map_t scope, const s_node_t *node)
 {
-  if (map_get(scope, node->decl.ident->data.ident)) {
-    LOG_DEBUG("redefinition of '%s'");
-    return;
-  }
+  if (map_get(scope, node->decl.ident->data.ident))
+    c_error(node->decl.ident, "redefinition of '%s'", node->decl.ident->data.ident);
+  
+  if (!node->decl.init && !node->decl.type->type.size)
+    c_error(node->decl.ident, "'%s' is uninitialized", node->decl.ident->data.ident);
   
   var_t *var = malloc(sizeof(var_t));
   var->type = int_type(scope, node->decl.type);
-  var->expr = int_expr(scope, node->decl.init);
+  var->expr = (expr_t) { 0 };
+  
+  if (node->decl.init) {
+    var->expr = int_expr(scope, node->decl.init);
+    if (var->type.spec != var->expr.type.spec) {
+      c_error(
+        node->decl.type->type.spec,
+        "incompatible types: initializing '%z' using '%z'",
+        &var->type, &var->expr.type);
+    }
+  }
   
   map_put(scope, node->decl.ident->data.ident, var);
 }
@@ -86,6 +77,8 @@ type_t int_type(map_t scope, const s_node_t *node)
     type.spec = SPEC_F32;
     break;
   }
+  
+  expr_t size = int_expr(scope, node->type.size);
   
   return type;
 }
@@ -106,7 +99,7 @@ expr_t int_binop(map_t scope, const s_node_t *node)
   expr_t rhs = int_expr(scope, node->binop.rhs);
   
   expr_t expr;
-  if (lhs.type.spec == SPEC_I32 && rhs.type.spec == SPEC_I32) {
+  if (type_cmp(&lhs.type, &type_i32) && type_cmp(&rhs.type, &type_i32)) {
     switch (node->binop.op->token) {
     case '+':
       expr.i32 = lhs.i32 + rhs.i32;
@@ -120,9 +113,11 @@ expr_t int_binop(map_t scope, const s_node_t *node)
     case '/':
       expr.i32 = lhs.i32 / rhs.i32;
       break;
+    default:
+      goto err_no_op; // lol lmao
     }
     expr.type.spec = SPEC_I32;
-  } else if (lhs.type.spec == SPEC_F32 && rhs.type.spec == SPEC_F32) {
+  } if (type_cmp(&lhs.type, &type_f32) && type_cmp(&rhs.type, &type_f32)) {
     switch (node->binop.op->token) {
     case '+':
       expr.f32 = lhs.f32 + rhs.f32;
@@ -136,10 +131,17 @@ expr_t int_binop(map_t scope, const s_node_t *node)
     case '/':
       expr.f32 = lhs.f32 / rhs.f32;
       break;
+    default:
+      goto err_no_op; // lol lmao
     }
     expr.type.spec = SPEC_F32;
   } else {
-    
+err_no_op: // i actually used a goto lol
+    c_error(
+      node->binop.op,
+      "unknown operand type for '%t': '%z' and '%z'",
+      node->binop.op->token,
+      &lhs.type, &rhs.type);
   }
   
   return expr;
@@ -160,20 +162,22 @@ expr_t int_constant(map_t scope, const s_node_t *node)
     break;
   case TK_IDENTIFIER:
     var = map_get(scope, node->constant.lexeme->data.ident);
+    
+    if (!var) {
+      c_error(
+        node->constant.lexeme,
+        "'%s' undeclared",
+        node->constant.lexeme->data.ident);
+    }
+    
     expr = var->expr;
+    break;
   }
   
   return expr;
 }
 
-void expr_print(const expr_t *expr)
+static bool type_cmp(const type_t *a, const type_t *b)
 {
-  switch (expr->type.spec) {
-  case SPEC_I32:
-    printf("%i\n", expr->i32);
-    break;
-  case SPEC_F32:
-    printf("%f\n", expr->f32);
-    break;
-  }
+  return a->spec == b->spec && a->size == b->size;
 }

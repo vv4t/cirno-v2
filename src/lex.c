@@ -36,6 +36,8 @@ static op_t op_table[] = {
   { "/", '/' },
   { "=", '=' },
   { ";", ';' },
+  { "[", '[' },
+  { "]", ']' },
   { "(", '(' },
   { ")", ')' }
 };
@@ -48,7 +50,7 @@ static lexeme_t *match_word(lex_file_t *lex);
 static lexeme_t *match_op(lex_file_t *lex);
 static void     token_print(token_t token);
 static void     lexeme_print(const lexeme_t *lexeme);
-static void     lex_printf(const lexeme_t *lexeme, const char *fmt, va_list args)
+static void     lex_printf(const lexeme_t *lexeme, const char *fmt, va_list args);
 
 lex_t lex_parse(const char *src)
 {
@@ -62,8 +64,9 @@ lex_t lex_parse(const char *src)
   fseek(fp, 0, SEEK_END);
   size_t size = ftell(fp);
   fseek(fp, 0, SEEK_SET);
-  char *buffer = malloc(size);
+  char *buffer = malloc(size + 1);
   fread(buffer, 1, size, fp);
+  buffer[size] = 0;
   fclose(fp);
   
   lex_file_t lex_file = {
@@ -112,39 +115,6 @@ lex_t lex_parse(const char *src)
   };
   
   return lex;
-}
-
-static void lex_printf(const lexeme_t *lexeme, const char *fmt, va_list args)
-{
-  if (!lexeme)
-    return;
-  
-  printf("%s:%i:", lexeme->src, lexeme->line);
-  
-  va_list args;
-  va_start(args, fmt);
-  
-  while (*fmt) {
-    if (*fmt == '%') {
-      switch (*++fmt) {
-      case 't':
-        token_print(va_arg(args, token_t));
-        break;
-      case 'l':
-        lexeme_print(lexeme);
-        break;
-      case 's':
-        printf("%s", va_arg(args, char*));
-      }
-      
-      *++fmt;
-    } else {
-      printf("%c", *fmt++);
-    }
-  }
-  
-  va_end(args);
-  putc('\n', stdout);
 }
 
 void lex_next(lex_t *lex)
@@ -250,46 +220,4 @@ static lexeme_t *match_op(lex_file_t *lex)
   }
   
   return NULL;
-}
-
-static void lexeme_print(const lexeme_t *lexeme)
-{
-  if (lexeme) {
-    switch (lexeme->token) {
-    case TK_CONST_INTEGER:
-      printf("%i", lexeme->data.i32);
-      break;
-    case TK_CONST_FLOAT:
-      printf("%f", lexeme->data.f32);
-      break;
-    case TK_IDENTIFIER:
-      printf("%s", lexeme->data.ident);
-      break;
-    default:
-      token_print(lexeme->token);
-      break;
-    }
-  } else {
-    printf("EOF");
-  }
-}
-
-static void token_print(token_t token)
-{
-  const char *str_token_table[] = {
-    "integer",    // TK_CONST_INTEGER
-    "float",      // TK_CONST_FLOAT
-    "identifier", // TK_IDENTIFIER
-    "i32",        // TK_I32
-    "f32",        // TK_F32,
-    "EOF",        // TK_EOF
-  };
-  
-  if (token < TK_CONST_INTEGER) {
-    printf("%c", token);
-  } else if (token <= TK_EOF) {
-    printf("%s", str_token_table[token - TK_CONST_INTEGER]);
-  } else {
-    printf("(unknown:%i)", token);
-  }
 }
