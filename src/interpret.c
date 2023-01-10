@@ -9,6 +9,7 @@ static type_t type_i32 = { .spec = SPEC_I32, .size = 0 };
 static type_t type_f32 = { .spec = SPEC_I32, .size = 0 };
 
 static bool type_cmp(const type_t *a, const type_t *b);
+static bool type_lvalue(const type_t *type);
 
 static void   int_stmt(map_t scope, const s_node_t *node);
 static void   int_decl(map_t scope, const s_node_t *node);
@@ -23,7 +24,7 @@ expr_t int_shell(const s_node_t *node)
 {
   map_t scope = map_new();
   
-  expr_t expr;
+  expr_t expr = { 0 };
   const s_node_t *head = node;
   while (head) {
     switch (head->stmt.body->node_type) {
@@ -51,7 +52,6 @@ void int_decl(map_t scope, const s_node_t *node)
   
   var_t *var = malloc(sizeof(var_t));
   var->type = int_type(scope, node->decl.type);
-  var->expr = (expr_t) { 0 };
   
   if (node->decl.init) {
     var->expr = int_expr(scope, node->decl.init);
@@ -61,6 +61,9 @@ void int_decl(map_t scope, const s_node_t *node)
         "incompatible types: initializing '%z' using '%z'",
         &var->type, &var->expr.type);
     }
+  } else {
+    var->expr = (expr_t) { 0 };
+    var->expr.lvalue.var = var;
   }
   
   map_put(scope, node->decl.ident->data.ident, var);
@@ -78,7 +81,11 @@ type_t int_type(map_t scope, const s_node_t *node)
     break;
   }
   
-  expr_t size = int_expr(scope, node->type.size);
+  if (node->type.size) {
+    expr_t size = int_expr(scope, node->type.size);
+    if (!type_cmp(&size.type, &type_i32))
+      c_error(node->type.spec, "size of array has non-integer type");
+  }
   
   return type;
 }
@@ -98,7 +105,15 @@ expr_t int_binop(map_t scope, const s_node_t *node)
   expr_t lhs = int_expr(scope, node->binop.lhs);
   expr_t rhs = int_expr(scope, node->binop.rhs);
   
-  expr_t expr;
+  switch (node->binop.op->token) {
+  case '=':
+    if (!type_lvalue(&lhs.type))
+      c_error(node->binop.op, "lvalue required as left operand of assignment");
+    *lhs.lvalue.var = rhs;
+    break;
+  }
+  
+  expr_t expr = { 0 };
   if (type_cmp(&lhs.type, &type_i32) && type_cmp(&rhs.type, &type_i32)) {
     switch (node->binop.op->token) {
     case '+':
@@ -150,7 +165,7 @@ err_no_op: // i actually used a goto lol
 expr_t int_constant(map_t scope, const s_node_t *node)
 {
   var_t *var;
-  expr_t expr;
+  expr_t expr = { 0 };
   switch (node->constant.lexeme->token) {
   case TK_CONST_INTEGER:
     expr.type.spec = SPEC_I32;
@@ -180,4 +195,9 @@ expr_t int_constant(map_t scope, const s_node_t *node)
 static bool type_cmp(const type_t *a, const type_t *b)
 {
   return a->spec == b->spec && a->size == b->size;
+}
+
+static bool type_lvalue(const type_t *type)
+{
+  
 }
