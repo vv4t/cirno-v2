@@ -9,6 +9,7 @@ static type_t type_i32 = { .spec = SPEC_I32, .size = 0 };
 static type_t type_f32 = { .spec = SPEC_I32, .size = 0 };
 
 static bool type_cmp(const type_t *a, const type_t *b);
+static int  type_size_base(const type_t *type);
 
 static void   int_stmt(map_t scope, const s_node_t *node);
 static void   int_decl(map_t scope, const s_node_t *node);
@@ -17,7 +18,10 @@ static expr_t int_expr(map_t scope, const s_node_t *node);
 static expr_t int_binop(map_t scope, const s_node_t *node);
 static expr_t int_constant(map_t scope, const s_node_t *node);
 
-static unsigned int int_mem_stack[128];
+static int mem_stack[128];
+static int mem_ptr = 0;
+
+static int *mem_alloc(int size);
 
 expr_t int_shell(const s_node_t *node)
 {
@@ -61,6 +65,9 @@ void int_decl(map_t scope, const s_node_t *node)
         "incompatible types: initializing '%z' using '%z'",
         &var->type, &var->expr.type);
     }
+  } else if (var->type.size > 0) {
+    var->expr.type = var->type;
+    var->expr.mem = mem_alloc(var->type.size * type_base_size(&var->expr.type));
   }
   
   map_put(scope, node->decl.ident->data.ident, var);
@@ -180,4 +187,21 @@ expr_t int_constant(map_t scope, const s_node_t *node)
 static bool type_cmp(const type_t *a, const type_t *b)
 {
   return a->spec == b->spec && a->size == b->size;
+}
+
+static int type_size_base(const type_t *type)
+{
+  switch (type->spec) {
+  case SPEC_I32:
+    return 4;
+  case SPEC_F32:
+    return 4;
+  }
+}
+
+static int *mem_alloc(int size)
+{
+  int *block = &mem_stack[mem_ptr];
+  mem_ptr += (int) ceil((float) size / 4.0);
+  return block;
 }

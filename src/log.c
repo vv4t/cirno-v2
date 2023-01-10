@@ -86,6 +86,9 @@ static void type_print(const type_t *type)
   };
   
   printf("%s", str_spec_table[type->spec]);
+  
+  if (type->size)
+    printf("[%i]", type->size);
 }
 
 static void lexeme_print(const lexeme_t *lexeme)

@@ -16,8 +16,7 @@ typedef struct {
   union {
     int   i32;
     float f32;
-    int   *arr_i32;
-    float *arr_f32;
+    int   *mem;
   };
   type_t type;
 } expr_t;
