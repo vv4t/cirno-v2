@@ -8,7 +8,8 @@ typedef enum {
   S_BINOP,
   S_TYPE,
   S_DECL,
-  S_STMT
+  S_STMT,
+  S_INDEX
 } s_node_type_t;
 
 typedef struct s_node_s {
@@ -34,6 +35,11 @@ typedef struct s_node_s {
       struct s_node_s *rhs;
       const lexeme_t  *op;
     } binop;
+    struct {
+      struct s_node_s *base;
+      struct s_node_s *index;
+      const lexeme_t  *left_bracket;
+    } index;
   };
   s_node_type_t node_type;
 } s_node_t;

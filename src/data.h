@@ -1,6 +1,8 @@
 #ifndef DATA_H
 #define DATA_H
 
+#include <stdbool.h>
+
 typedef struct var_s var_t;
 
 typedef enum {
@@ -15,22 +17,17 @@ typedef struct {
 } type_t;
 
 typedef struct {
-  var_t *var;
-} lvalue_t;
-
-typedef struct {
   union {
     int   i32;
     float f32;
-    int   *mem;
   };
-  lvalue_t  lvalue;
-  type_t    type;
+  char    *loc;
+  type_t  type;
 } expr_t;
 
 struct var_s {
   type_t        type;
-  expr_t        expr;
+  char          *loc;
   struct var_s  *next;
 };
 

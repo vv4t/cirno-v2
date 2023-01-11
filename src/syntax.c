@@ -29,6 +29,7 @@ static s_node_t *s_decl(lex_t *lex);
 static s_node_t *s_type(lex_t *lex);
 static s_node_t *s_expr(lex_t *lex);
 static s_node_t *s_binop(lex_t *lex, int op_set);
+static s_node_t *s_postfix(lex_t *lex);
 static s_node_t *s_primary(lex_t *lex);
 
 typedef enum {
@@ -47,6 +48,7 @@ static s_node_t *make_decl(s_node_t *type, const lexeme_t *ident, s_node_t *init
 static s_node_t *make_type(const lexeme_t *spec, s_node_t *size);
 static s_node_t *make_constant(const lexeme_t *lexeme);
 static s_node_t *make_binop(s_node_t *lhs, const lexeme_t *op, s_node_t *rhs);
+static s_node_t *make_index(s_node_t *base, s_node_t *index, const lexeme_t *left_bracket);
 static s_node_t *make_node(s_node_type_t type);
 
 static void s_print_R(s_node_t *node, int pad)
@@ -72,6 +74,11 @@ static void s_print_R(s_node_t *node, int pad)
     LOG_DEBUG("%*sS_DECL", pad, "");
     s_print_R(node->decl.type, pad + 2);
     s_print_R(node->decl.init, pad + 2);
+    break;
+  case S_INDEX:
+    LOG_DEBUG("%*sS_INDEX", pad, "");
+    s_print_R(node->index.base, pad + 2);
+    s_print_R(node->index.index, pad + 2);
     break;
   case S_STMT:
     LOG_DEBUG("%*sS_STMT", pad, "");
@@ -159,7 +166,7 @@ static s_node_t *s_expr(lex_t *lex)
 static s_node_t *s_binop(lex_t *lex, int op_set)
 {
   if (op_set >= num_op_set)
-    return s_primary(lex);
+    return s_postfix(lex);
   
   s_node_t *lhs = s_binop(lex, op_set + 1);
   if (!lhs)
@@ -177,6 +184,20 @@ static s_node_t *s_binop(lex_t *lex, int op_set)
   }
   
   return lhs;
+}
+
+static s_node_t *s_postfix(lex_t *lex)
+{
+  s_node_t *base = s_primary(lex);
+  const lexeme_t *left_bracket = NULL;
+  
+  if ((left_bracket = lex_match(lex, '['))) {
+    s_node_t *index = s_expect_rule(lex, R_EXPR);
+    s_expect(lex, ']');
+    return make_index(base, index, left_bracket);
+  }
+  
+  return base;
 }
 
 static s_node_t *s_primary(lex_t *lex)
@@ -263,6 +284,16 @@ static s_node_t *make_binop(s_node_t *lhs, const lexeme_t *op, s_node_t *rhs)
   node->binop.lhs = lhs;
   node->binop.op = op;
   node->binop.rhs = rhs;
+  return node;
+}
+
+static s_node_t *make_index(s_node_t *base, s_node_t *index, const lexeme_t *left_bracket)
+{
+  s_node_t *node = make_node(S_INDEX);
+  node->index.base = base;
+  node->index.index = index;
+  node->index.left_bracket = left_bracket;
+  return node;
 }
 
 static s_node_t *make_constant(const lexeme_t *lexeme)
