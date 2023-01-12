@@ -23,8 +23,13 @@ typedef struct {
 } word_t;
 
 static word_t word_table[] = {
-  { "i32", TK_I32 },
-  { "f32", TK_F32 }
+  { "class",      TK_CLASS      },
+  { "class_def",  TK_CLASS_DEF  },
+  { "print",      TK_PRINT      },
+  { "while",      TK_WHILE      },
+  { "i32",        TK_I32        },
+  { "f32",        TK_F32        },
+  { "if",         TK_IF         }
 };
 
 static int num_word_table = sizeof(word_table) / sizeof(word_t);
@@ -34,8 +39,13 @@ static op_t op_table[] = {
   { "+", '+' },
   { "*", '*' },
   { "/", '/' },
+  { "<", '<' },
+  { ">", '>' },
   { "=", '=' },
+  { ".", '.' },
   { ";", ';' },
+  { "{", '{' },
+  { "}", '}' },
   { "[", '[' },
   { "]", ']' },
   { "(", '(' },
@@ -162,16 +172,16 @@ static lexeme_t *match_const_integer(lex_file_t *lex)
     lex->c++;
   } while (isdigit(*lex->c));
   
-  if (*lex->c == '.') {
+  if (*lex->c == '.' && isdigit(lex->c[1])) {
     lex->c++;
     float f_num = (float) num;
     float digit = 0.1;
     
-    do {
+    while (isdigit(*lex->c)) {
       f_num += (float) (*lex->c - '0') * digit;
       digit *= 0.1;
       lex->c++;
-    } while (isdigit(*lex->c));
+    }
     
     lexeme_t *lexeme = make_lexeme(TK_CONST_FLOAT, lex);
     lexeme->data.f32 = num;

@@ -15,6 +15,7 @@ typedef struct {
 
 static op_set_t op_set_table[] = {
   { '=' },
+  { '<', '>' },
   { '+', '-' },
   { '*', '/' }
 };
@@ -24,7 +25,12 @@ static int num_op_set = sizeof(op_set_table) / sizeof(op_set_t);
 static const lexeme_t *s_expect(lex_t *lex, token_t token);
 
 static s_node_t *s_body(lex_t *lex);
+static s_node_t *s_if_stmt(lex_t *lex);
+static s_node_t *s_while_stmt(lex_t *lex);
+static s_node_t *s_class_def(lex_t *lex);
+static s_node_t *s_class_decl(lex_t *lex);
 static s_node_t *s_stmt(lex_t *lex);
+static s_node_t *s_print(lex_t *lex);
 static s_node_t *s_decl(lex_t *lex);
 static s_node_t *s_type(lex_t *lex);
 static s_node_t *s_expr(lex_t *lex);
@@ -32,10 +38,12 @@ static s_node_t *s_binop(lex_t *lex, int op_set);
 static s_node_t *s_postfix(lex_t *lex);
 static s_node_t *s_primary(lex_t *lex);
 
+static void s_print_node_R(const s_node_t *node, int pad);
+void s_print_node(const s_node_t *node);
+
 typedef enum {
+  R_BODY,
   R_STMT,
-  R_DECL,
-  R_TYPE,
   R_EXPR
 } rule_t;
 
@@ -44,73 +52,75 @@ typedef s_node_t *(*s_rule_t)(lex_t *lex);
 static s_node_t *s_expect_rule(lex_t *lex, rule_t rule);
 
 static s_node_t *make_stmt(s_node_t *body, s_node_t *next);
+static s_node_t *make_if_stmt(s_node_t *cond, s_node_t *body);
+static s_node_t *make_while_stmt(s_node_t *cond, s_node_t *body);
+static s_node_t *make_class_def(const lexeme_t *ident, s_node_t *class_decl);
 static s_node_t *make_decl(s_node_t *type, const lexeme_t *ident, s_node_t *init);
-static s_node_t *make_type(const lexeme_t *spec, s_node_t *size);
+static s_node_t *make_class_decl(s_node_t *type, const lexeme_t *ident, s_node_t *next);
+static s_node_t *make_type(const lexeme_t *spec, s_node_t *size, const lexeme_t *class_ident);
 static s_node_t *make_constant(const lexeme_t *lexeme);
 static s_node_t *make_binop(s_node_t *lhs, const lexeme_t *op, s_node_t *rhs);
 static s_node_t *make_index(s_node_t *base, s_node_t *index, const lexeme_t *left_bracket);
+static s_node_t *make_child(s_node_t *base, const lexeme_t *child_ident);
+static s_node_t *make_print(s_node_t *body);
 static s_node_t *make_node(s_node_type_t type);
-
-static void s_print_R(s_node_t *node, int pad)
-{
-  if (!node) {
-    LOG_DEBUG("%*s", pad, "-");
-    return;
-  }
-  
-  switch (node->node_type) {
-  case S_CONSTANT:
-    LOG_DEBUG("%*sS_CONSTANT", pad, "");
-    break;
-  case S_BINOP:
-    LOG_DEBUG("%*sS_BINOP", pad, "");
-    s_print_R(node->binop.lhs, pad + 2);
-    s_print_R(node->binop.rhs, pad + 2);
-    break;
-  case S_TYPE:
-    LOG_DEBUG("%*sS_TYPE", pad, "");
-    break;
-  case S_DECL:
-    LOG_DEBUG("%*sS_DECL", pad, "");
-    s_print_R(node->decl.type, pad + 2);
-    s_print_R(node->decl.init, pad + 2);
-    break;
-  case S_INDEX:
-    LOG_DEBUG("%*sS_INDEX", pad, "");
-    s_print_R(node->index.base, pad + 2);
-    s_print_R(node->index.index, pad + 2);
-    break;
-  case S_STMT:
-    LOG_DEBUG("%*sS_STMT", pad, "");
-    s_print_R(node->stmt.body, pad + 2);
-    s_print_R(node->stmt.next, pad);
-    break;
-  }
-}
-
-void s_print(s_node_t *s_tree)
-{
-  s_print_R(s_tree, 0);
-}
 
 s_node_t *s_parse(lex_t *lex)
 {
-  return s_body(lex);
+  s_node_t *node = s_body(lex);
+  if (s_err)
+    return NULL;
+  return node;
 }
 
 static s_node_t *s_body(lex_t *lex)
 {
-  s_node_t *body = s_stmt(lex);
-  if (body)
-    return make_stmt(body, s_body(lex));
-  return NULL;
+  s_node_t *body = NULL;
+  s_node_t *stmt_body = s_stmt(lex);
+  if (stmt_body) {
+    body = make_stmt(stmt_body, NULL);
+  } else if (lex_match(lex, '{')) {
+    s_node_t *head = NULL;
+    stmt_body = s_stmt(lex);
+    
+    while (stmt_body) {
+      if (head)
+        head = head->stmt.next = make_stmt(stmt_body, NULL);
+      else
+        body = head = make_stmt(stmt_body, NULL);
+      
+      stmt_body = s_stmt(lex);
+    }
+    
+    s_expect(lex, '}');
+  }
+  
+  return body;
 }
 
 static s_node_t *s_stmt(lex_t *lex)
 {
   s_node_t *node = NULL;
- 
+  
+  node = s_while_stmt(lex);
+  if (node)
+    return node;
+  
+  node = s_if_stmt(lex);
+  if (node)
+    return node;
+  
+  node = s_print(lex);
+  if (node)
+    return node;
+  
   node = s_decl(lex); 
+  if (node) {
+    s_expect(lex, ';');
+    return node;
+  }
+  
+  node = s_class_def(lex);
   if (node) {
     s_expect(lex, ';');
     return node;
@@ -123,6 +133,71 @@ static s_node_t *s_stmt(lex_t *lex)
   }
   
   return NULL;
+}
+
+static s_node_t *s_while_stmt(lex_t *lex)
+{
+  if (!lex_match(lex, TK_WHILE))
+    return NULL;
+  
+  s_expect(lex, '(');
+  s_node_t *cond = s_expect_rule(lex, R_EXPR);
+  s_expect(lex, ')');
+  
+  s_node_t *body = s_expect_rule(lex, R_BODY);
+  
+  return make_while_stmt(cond, body);
+}
+
+static s_node_t *s_if_stmt(lex_t *lex)
+{
+  if (!lex_match(lex, TK_IF))
+    return NULL;
+  
+  s_expect(lex, '(');
+  s_node_t *cond = s_expect_rule(lex, R_EXPR);
+  s_expect(lex, ')');
+  
+  s_node_t *body = s_expect_rule(lex, R_BODY);
+  
+  return make_if_stmt(cond, body);
+}
+
+static s_node_t *s_print(lex_t *lex)
+{
+  if (!lex_match(lex, TK_PRINT))
+    return NULL;
+  
+  s_node_t *body = s_expect_rule(lex, R_EXPR);
+  s_expect(lex, ';');
+  
+  return make_print(body);
+}
+
+static s_node_t *s_class_def(lex_t *lex)
+{
+  if (!lex_match(lex, TK_CLASS_DEF))
+    return NULL;
+  
+  const lexeme_t *ident = s_expect(lex, TK_IDENTIFIER);
+  
+  s_expect(lex, '{');
+  s_node_t *class_decl = s_class_decl(lex);
+  s_expect(lex, '}');
+  
+  return make_class_def(ident, class_decl);
+}
+
+static s_node_t *s_class_decl(lex_t *lex)
+{
+  s_node_t *type = s_type(lex);
+  if (!type)
+    return NULL;
+  
+  const lexeme_t *ident = s_expect(lex, TK_IDENTIFIER);
+  s_expect(lex, ';');
+  
+  return make_class_decl(type, ident, s_class_decl(lex));
 }
 
 static s_node_t *s_decl(lex_t *lex)
@@ -143,10 +218,13 @@ static s_node_t *s_decl(lex_t *lex)
 static s_node_t *s_type(lex_t *lex)
 {
   const lexeme_t *spec = NULL;
+  const lexeme_t *class_ident = NULL;
   
   if ((spec = lex_match(lex, TK_I32)));
   else if ((spec = lex_match(lex, TK_F32)));
-  else
+  else if ((spec = lex_match(lex, TK_CLASS))) {
+    class_ident = s_expect(lex, TK_IDENTIFIER);
+  } else
     return NULL;
   
   s_node_t *size = NULL;
@@ -155,7 +233,7 @@ static s_node_t *s_type(lex_t *lex)
     s_expect(lex, ']');
   }
   
-  return make_type(spec, size);
+  return make_type(spec, size, class_ident);
 }
 
 static s_node_t *s_expr(lex_t *lex)
@@ -189,15 +267,20 @@ static s_node_t *s_binop(lex_t *lex, int op_set)
 static s_node_t *s_postfix(lex_t *lex)
 {
   s_node_t *base = s_primary(lex);
-  const lexeme_t *left_bracket = NULL;
   
-  if ((left_bracket = lex_match(lex, '['))) {
-    s_node_t *index = s_expect_rule(lex, R_EXPR);
-    s_expect(lex, ']');
-    return make_index(base, index, left_bracket);
+  while (1) {
+    const lexeme_t *left_bracket = NULL;
+    if ((left_bracket = lex_match(lex, '['))) {
+      s_node_t *index = s_expect_rule(lex, R_EXPR);
+      s_expect(lex, ']');
+      base = make_index(base, index, left_bracket);
+    } else if (lex_match(lex, '.')) {
+      const lexeme_t *child_ident = s_expect(lex, TK_IDENTIFIER);
+      base = make_child(base, child_ident);
+    } else {
+      return base;
+    }
   }
-  
-  return base;
 }
 
 static s_node_t *s_primary(lex_t *lex)
@@ -222,23 +305,23 @@ static s_node_t *s_primary(lex_t *lex)
 static s_node_t *s_expect_rule(lex_t *lex, rule_t rule)
 {
   static s_rule_t s_rule_table[] = {
+    s_body, // R_BODY
     s_stmt, // R_STMT
-    s_decl, // R_DECL
-    s_type, // R_TYPE
     s_expr  // R_EXPR
   };
   
   static const char *str_rule_table[] = {
-    "statement",    // R_STMT
-    "declaration",  // R_DECL
-    "type",         // R_TYPE
-    "expression"    // R_EXPR
+    "body-statement", // R_BODY
+    "statement",      // R_STMT
+    "expression"      // R_EXPR
   };
   
   s_node_t *node = s_rule_table[rule](lex);
   
-  if (!node)
+  if (!node) {
     c_error(lex->lexeme, "error: expected '%s' before '%l'", str_rule_table[rule], lex->lexeme);
+    s_err = true;
+  }
   
   return node;
 }
@@ -247,8 +330,10 @@ static const lexeme_t *s_expect(lex_t *lex, token_t token)
 {
   const lexeme_t *lexeme = lex_match(lex, token);
   
-  if (!lexeme)
+  if (!lexeme) {
     c_error(lex->lexeme, "error: expected '%t' before '%l'", token, lex->lexeme);
+    s_err = true;
+  }
   
   return lexeme;
 }
@@ -261,6 +346,46 @@ static s_node_t *make_stmt(s_node_t *body, s_node_t *next)
   return node;
 }
 
+static s_node_t *make_if_stmt(s_node_t *cond, s_node_t *body)
+{
+  s_node_t *node = make_node(S_IF_STMT);
+  node->if_stmt.cond = cond;
+  node->if_stmt.body = body;
+  return node;
+}
+
+static s_node_t *make_while_stmt(s_node_t *cond, s_node_t *body)
+{
+  s_node_t *node = make_node(S_WHILE_STMT);
+  node->while_stmt.cond = cond;
+  node->while_stmt.body = body;
+  return node;
+}
+
+static s_node_t *make_print(s_node_t *body)
+{
+  s_node_t *node = make_node(S_PRINT);
+  node->print.body = body;
+  return node;
+}
+
+static s_node_t *make_class_def(const lexeme_t *ident, s_node_t *class_decl)
+{
+  s_node_t *node = make_node(S_CLASS_DEF);
+  node->class_def.ident = ident;
+  node->class_def.class_decl = class_decl;
+  return node;
+}
+
+static s_node_t *make_class_decl(s_node_t *type, const lexeme_t *ident, s_node_t *next)
+{
+  s_node_t *node = make_node(S_CLASS_DECL);
+  node->class_decl.type = type;
+  node->class_decl.ident = ident;
+  node->class_decl.next = next;
+  return node;
+}
+
 static s_node_t *make_decl(s_node_t *type, const lexeme_t *ident, s_node_t *init)
 {
   s_node_t *node = make_node(S_DECL);
@@ -270,11 +395,12 @@ static s_node_t *make_decl(s_node_t *type, const lexeme_t *ident, s_node_t *init
   return node;
 }
 
-static s_node_t *make_type(const lexeme_t *spec, s_node_t *size)
+static s_node_t *make_type(const lexeme_t *spec, s_node_t *size, const lexeme_t *class_ident)
 {
   s_node_t *node = make_node(S_TYPE);
   node->type.spec = spec;
   node->type.size = size;
+  node->type.class_ident = class_ident;
   return node;
 }
 
@@ -296,6 +422,14 @@ static s_node_t *make_index(s_node_t *base, s_node_t *index, const lexeme_t *lef
   return node;
 }
 
+static s_node_t *make_child(s_node_t *base, const lexeme_t *child_ident)
+{
+  s_node_t *node = make_node(S_CHILD);
+  node->child.base = base;
+  node->child.child_ident = child_ident;
+  return node;
+}
+
 static s_node_t *make_constant(const lexeme_t *lexeme)
 {
   s_node_t *node = make_node(S_CONSTANT);
@@ -309,4 +443,70 @@ static s_node_t *make_node(s_node_type_t node_type)
   *node = (s_node_t) { 0 };
   node->node_type = node_type;
   return node;
+}
+
+static void s_print_node_R(const s_node_t *node, int pad)
+{
+  if (!node) {
+    LOG_DEBUG("%*s", pad, "-");
+    return;
+  }
+  
+  switch (node->node_type) {
+  case S_CONSTANT:
+    LOG_DEBUG("%*sS_CONSTANT", pad, "");
+    break;
+  case S_BINOP:
+    LOG_DEBUG("%*sS_BINOP", pad, "");
+    s_print_node_R(node->binop.lhs, pad + 2);
+    s_print_node_R(node->binop.rhs, pad + 2);
+    break;
+  case S_TYPE:
+    LOG_DEBUG("%*sS_TYPE", pad, "");
+    s_print_node_R(node->type.size, pad + 2);
+    break;
+  case S_DECL:
+    LOG_DEBUG("%*sS_DECL", pad, "");
+    s_print_node_R(node->decl.type, pad + 2);
+    s_print_node_R(node->decl.init, pad + 2);
+    break;
+  case S_CLASS_DEF:
+    LOG_DEBUG("%*sS_CLASS_DEF", pad, "");
+    s_print_node_R(node->class_def.class_decl, pad + 2);
+    break;
+  case S_CLASS_DECL:
+    LOG_DEBUG("%*sS_CLASS_DECL", pad, "");
+    s_print_node_R(node->class_decl.type, pad + 2);
+    s_print_node_R(node->class_decl.next, pad);
+    break;
+  case S_INDEX:
+    LOG_DEBUG("%*sS_INDEX", pad, "");
+    s_print_node_R(node->index.base, pad + 2);
+    s_print_node_R(node->index.index, pad + 2);
+    break;
+  case S_STMT:
+    LOG_DEBUG("%*sS_STMT", pad, "");
+    s_print_node_R(node->stmt.body, pad + 2);
+    s_print_node_R(node->stmt.next, pad);
+    break;
+  case S_IF_STMT:
+    LOG_DEBUG("%*sS_IF_STMT", pad, "");
+    s_print_node_R(node->if_stmt.cond, pad + 2);
+    s_print_node_R(node->if_stmt.body, pad + 2);
+    break;
+  case S_WHILE_STMT:
+    LOG_DEBUG("%*sS_WHILE_STMT", pad, "");
+    s_print_node_R(node->while_stmt.cond, pad + 2);
+    s_print_node_R(node->while_stmt.body, pad + 2);
+    break;
+  case S_PRINT:
+    LOG_DEBUG("%*sS_PRINT", pad, "");
+    s_print_node_R(node->print.body, pad + 2);
+    break;
+  }
+}
+
+void s_print_node(const s_node_t *node)
+{
+  s_print_node_R(node, 0);
 }

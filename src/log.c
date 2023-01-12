@@ -21,15 +21,12 @@ void c_error(const lexeme_t *lexeme, const char *fmt, ...)
   va_end(args);
   
   putc('\n', stdout);
-  
-  exit(1);
 }
 
 void c_debug(const char *fmt, ...)
 {
   va_list args;
   va_start(args, fmt);
-  printf("debug: ");
   c_printf(fmt, args);
   va_end(args);
   
@@ -82,7 +79,8 @@ static void type_print(const type_t *type)
   const char *str_spec_table[] = {
     "none",
     "i32",
-    "f32"
+    "f32",
+    "class"
   };
   
   printf("%s", str_spec_table[type->spec]);
@@ -120,8 +118,13 @@ static void token_print(token_t token)
     "float",      // TK_CONST_FLOAT
     "identifier", // TK_IDENTIFIER
     "i32",        // TK_I32
-    "f32",        // TK_F32,
-    "EOF",        // TK_EOF
+    "f32",        // TK_F32
+    "if",         // TK_IF
+    "class",      // TK_CLASS
+    "class_def",  // TK_CLASS_DEF
+    "print",      // TK_PRINT
+    "while",      // TK_WHILE
+    "EOF"         // TK_EOF
   };
   
   if (token < TK_CONST_INTEGER) {

@@ -1,34 +1,41 @@
 #include "interpret.h"
 
 #include "log.h"
-#include "map.h"
-#include <stdlib.h>
-#include <stdbool.h>
 
-static type_t type_i32 = { .spec = SPEC_I32, .size = 0 };
-static type_t type_f32 = { .spec = SPEC_F32, .size = 0 };
+static bool int_stmt(const s_node_t *node);
+static bool int_print(const s_node_t *node);
+static bool int_if_stmt(const s_node_t *node);
+static bool int_while_stmt(const s_node_t *node);
+static bool int_decl(const s_node_t *node);
+static bool int_class_def(const s_node_t *node);
 
-static bool type_cmp(const type_t *a, const type_t *b);
-static bool type_array(const type_t *type);
-static int  type_size(const type_t *type);
-static int  type_size_base(const type_t *type);
+static bool int_type(type_t *type, const s_node_t *node);
 
-static void   int_stmt(map_t scope, const s_node_t *node);
-static void   int_decl(map_t scope, const s_node_t *node);
-static type_t int_type(map_t scope, const s_node_t *node);
-static expr_t int_expr(map_t scope, const s_node_t *node);
-static expr_t int_index(map_t scope, const s_node_t *node);
-static expr_t int_binop(map_t scope, const s_node_t *node);
-static expr_t int_constant(map_t scope, const s_node_t *node);
+static bool int_expr(expr_t *expr, const s_node_t *node);
+static bool int_index(expr_t *expr, const s_node_t *node);
+static bool int_child(expr_t *expr, const s_node_t *node);
+static bool int_binop(expr_t *expr, const s_node_t *node);
+static bool int_constant(expr_t *expr, const s_node_t *node);
 
-static char mem_stack[128];
+static char mem_stack[512];
 static int  mem_ptr = 0;
-static char *mem_alloc(int size);
+static void mem_load(int loc, const type_t *type, expr_t *expr);
+static void mem_assign(int loc, const type_t *type, expr_t *expr);
 
-expr_t int_shell(const s_node_t *node)
+static scope_t  scope;
+
+bool interpret(const s_node_t *node)
 {
-  map_t scope = map_new();
+  scope_new(&scope);
+  scope.size += 4;
   
+  int_stmt(node);
+  
+  return true;
+}
+
+bool int_stmt(const s_node_t *node)
+{
   expr_t expr;
   const s_node_t *head = node;
   while (head) {
@@ -36,137 +43,284 @@ expr_t int_shell(const s_node_t *node)
     case S_BINOP:
     case S_CONSTANT:
     case S_INDEX:
-      expr = int_expr(scope, head->stmt.body);
+    case S_CHILD:
+      if (!int_expr(&expr, head->stmt.body))
+        return false;
       break;
     case S_DECL:
-      int_decl(scope, head->stmt.body);
+      if (!int_decl(head->stmt.body))
+        return false;
+      break;
+    case S_CLASS_DEF:
+      if (!int_class_def(head->stmt.body))
+        return false;
+      break;
+    case S_PRINT:
+      if (!int_print(head->stmt.body))
+        return false;
+      break;
+    case S_IF_STMT:
+      if (!int_if_stmt(head->stmt.body))
+        return false;
+      break;
+    case S_WHILE_STMT:
+      if (!int_while_stmt(head->stmt.body))
+        return false;
       break;
     }
     head = head->stmt.next;
   }
   
-  return expr;
+  return true;
 }
 
-void int_decl(map_t scope, const s_node_t *node)
+bool int_while_stmt(const s_node_t *node)
 {
-  if (map_get(scope, node->decl.ident->data.ident))
+  expr_t cond;
+  if (!int_expr(&cond, node->while_stmt.cond))
+    return false;
+  
+  while (cond.i32 != 0) {
+    if (!int_stmt(node->while_stmt.body))
+      return false;
+    
+    if (!int_expr(&cond, node->while_stmt.cond))
+      return false;
+  }
+  
+  return true;
+}
+
+bool int_if_stmt(const s_node_t *node)
+{
+  expr_t cond;
+  if (!int_expr(&cond, node->if_stmt.cond))
+    return false;
+  
+  if (cond.i32 != 0) {
+    if (!int_stmt(node->if_stmt.body))
+      return false;
+  }
+  
+  return true;
+}
+
+bool int_print(const s_node_t *node)
+{
+  expr_t expr;
+  if (!int_expr(&expr, node->print.body))
+    return false;
+  
+  c_debug("out: %w", &expr);
+  
+  return true;
+}
+
+bool int_class_def(const s_node_t *node)
+{
+  if (scope_find_class(&scope, node->class_def.ident->data.ident)) {
+    c_error(node->decl.ident, "redefinition of class '%s'", node->class_def.ident->data.ident);
+    return false;
+  }
+  
+  scope_t class_scope;
+  scope_new(&class_scope);
+  
+  s_node_t *head = node->class_def.class_decl;
+  
+  while (head) {
+    type_t type;
+    if (!int_type(&type, head->class_decl.type))
+      return false;
+    
+    if (scope_find_var(&class_scope, head->class_decl.ident->data.ident)) {
+      c_error(
+        node->class_def.ident,
+        "redefinition of '%s' in class '%s'",
+        head->class_decl.ident->data.ident,
+        node->class_def.ident->data.ident);
+      return false;
+    }
+    
+    scope_add_var(&class_scope, &type, head->class_decl.ident->data.ident);
+    head = head->class_decl.next;
+  }
+  
+  scope_add_class(&scope, node->class_def.ident->data.ident, &class_scope);
+  
+  return true;
+}
+
+bool int_decl(const s_node_t *node)
+{
+  if (scope_find_var(&scope, node->decl.ident->data.ident)) {
     c_error(node->decl.ident, "redefinition of '%s'", node->decl.ident->data.ident);
+    return false;
+  }
   
-  var_t *var = malloc(sizeof(var_t));
-  var->type = int_type(scope, node->decl.type);
-  var->loc = mem_alloc(type_size(&var->type));
+  type_t type;
+  if (!int_type(&type, node->decl.type))
+    return false;
   
+  var_t *var = scope_add_var(&scope, &type, node->decl.ident->data.ident);
   if (node->decl.init) {
-    expr_t expr = int_expr(scope, node->decl.init);
-    if (!type_cmp(&var->type, &expr.type)) {
+    expr_t expr;
+    
+    if (!int_expr(&expr, node->decl.init))
+      return false;
+    
+    if (!type_cmp(&type, &expr.type)) {
       c_error(
         node->decl.type->type.spec,
         "incompatible types when initializing '%z' with '%z'",
-        &var->type, &expr.type);
+        &type, &expr.type);
+      return false;
     }
     
-    if (type_cmp(&var->type, &type_i32))
-      *((int*) var->loc) = expr.i32;
-    else if (type_cmp(&var->type, &type_f32))
-      *((float*) var->loc) = expr.f32;
+    mem_assign(var->loc, &var->type, &expr);
   }
   
-  map_put(scope, node->decl.ident->data.ident, var);
+  
+  return true;
 }
 
-type_t int_type(map_t scope, const s_node_t *node)
+bool int_type(type_t *type, const s_node_t *node)
 {
-  type_t type;
+  type->class = NULL;
   switch (node->type.spec->token) {
   case TK_I32:
-    type.spec = SPEC_I32;
+    type->spec = SPEC_I32;
     break;
   case TK_F32:
-    type.spec = SPEC_F32;
+    type->spec = SPEC_F32;
+    break;
+  case TK_CLASS:
+    type->spec = SPEC_CLASS;
+    
+    type->class = scope_find_class(&scope, node->type.class_ident->data.ident);
+    if (!type->class) {
+      c_error(
+        node->type.class_ident,
+        "use of undefined class '%s'",
+        node->type.class_ident->data.ident);
+      return false;
+    }
+    
     break;
   }
   
   if (node->type.size) {
-    expr_t size = int_expr(scope, node->type.size);
-    if (!type_cmp(&size.type, &type_i32))
+    expr_t size;
+    
+    if (!int_expr(&size, node->type.size))
+      return false;
+    
+    if (!type_cmp(&size.type, &type_i32)) {
       c_error(node->type.spec, "size of array has non-integer type");
-    type.size = size.i32;
+      return false;
+    }
+    
+    type->size = size.i32;
   } else {
-    type.size = 0;
+    type->size = 0;
   }
   
-  return type;
+  return true;
 }
 
-expr_t int_expr(map_t scope, const s_node_t *node)
+bool int_expr(expr_t *expr, const s_node_t *node)
 {
   switch (node->node_type) {
   case S_BINOP:
-    return int_binop(scope, node);
+    return int_binop(expr, node);
   case S_INDEX:
-    return int_index(scope, node);
+    return int_index(expr, node);
+  case S_CHILD:
+    return int_child(expr, node);
   case S_CONSTANT:
-    return int_constant(scope, node);
+    return int_constant(expr, node);
   }
 }
 
-expr_t int_binop(map_t scope, const s_node_t *node)
+bool int_binop(expr_t *expr, const s_node_t *node)
 {
-  expr_t lhs = int_expr(scope, node->binop.lhs);
-  expr_t rhs = int_expr(scope, node->binop.rhs);
+  expr_t lhs;
+  if (!int_expr(&lhs, node->binop.lhs))
+    return false;
   
-  expr_t expr;
+  expr_t rhs;
+  if (!int_expr(&rhs, node->binop.rhs))
+    return false;
+  
+  expr->loc = 0;
   if (type_cmp(&lhs.type, &type_i32) && type_cmp(&rhs.type, &type_i32)) {
-    expr.type = type_i32;
-    expr.loc = NULL;
-    
+    expr->type = type_i32;
     switch (node->binop.op->token) {
     case '+':
-      expr.i32 = lhs.i32 + rhs.i32;
+      expr->i32 = lhs.i32 + rhs.i32;
       break;
     case '-':
-      expr.i32 = lhs.i32 - rhs.i32;
+      expr->i32 = lhs.i32 - rhs.i32;
       break;
     case '*':
-      expr.i32 = lhs.i32 * rhs.i32;
+      expr->i32 = lhs.i32 * rhs.i32;
       break;
     case '/':
-      expr.i32 = lhs.i32 / rhs.i32;
+      expr->i32 = lhs.i32 / rhs.i32;
+      break;
+    case '<':
+      expr->i32 = lhs.i32 < rhs.i32;
+      break;
+    case '>':
+      expr->i32 = lhs.i32 > rhs.i32;
       break;
     case '=':
-      if (!lhs.loc)
+      if (!lhs.loc) {
         c_error(node->binop.op, "lvalue required as left operand of assignment");
-      *((int*)lhs.loc) = rhs.i32;
-      lhs.i32 = rhs.i32;
-      expr = lhs; 
+        return false;
+      }
+      
+      mem_assign(lhs.loc, &type_i32, &rhs);
+      *expr = lhs;
+      expr->i32 = rhs.i32;
+      
       break;
     default:
       goto err_no_op; // lol lmao
     }
-  } if (type_cmp(&lhs.type, &type_f32) && type_cmp(&rhs.type, &type_f32)) {
-    expr.type = type_f32;
-    expr.loc = NULL;
-    
+  } else if (type_cmp(&lhs.type, &type_f32) && type_cmp(&rhs.type, &type_f32)) {
+    expr->type = type_f32;
     switch (node->binop.op->token) {
     case '+':
-      expr.f32 = lhs.f32 + rhs.f32;
+      expr->f32 = lhs.f32 + rhs.f32;
       break;
     case '-':
-      expr.f32 = lhs.f32 - rhs.f32;
+      expr->f32 = lhs.f32 - rhs.f32;
       break;
     case '*':
-      expr.f32 = lhs.f32 * rhs.f32;
+      expr->f32 = lhs.f32 * rhs.f32;
       break;
     case '/':
-      expr.f32 = lhs.f32 / rhs.f32;
+      expr->f32 = lhs.f32 / rhs.f32;
+      break;
+    case '<':
+      expr->type = type_i32;
+      expr->i32 = lhs.f32 < rhs.f32;
+      break;
+    case '>':
+      expr->type = type_i32;
+      expr->i32 = lhs.f32 > rhs.f32;
       break;
     case '=':
-      if (!lhs.loc)
+      if (!lhs.loc) {
         c_error(node->binop.op, "lvalue required as left operand of assignment");
-      *((float*)lhs.loc) = rhs.f32;
-      lhs.f32 = rhs.f32;
-      expr = lhs; 
+        return false;
+      }
+      
+      mem_assign(lhs.loc, &type_f32, &rhs);
+      *expr = lhs;
+      expr->f32 = rhs.f32;
+      
       break;
     default:
       goto err_no_op; // lol lmao
@@ -178,101 +332,118 @@ err_no_op: // i actually used a goto lol
       "unknown operand type for '%t': '%z' and '%z'",
       node->binop.op->token,
       &lhs.type, &rhs.type);
+    return false;
   }
   
-  return expr;
+  return true;
 }
 
-expr_t int_index(map_t scope, const s_node_t *node)
+bool int_child(expr_t *expr, const s_node_t *node)
 {
-  expr_t base = int_expr(scope, node->index.base);
-  if (!type_array(&base.type))
-    c_error(node->index.left_bracket, "subscripted value is not an array");
+  expr_t base;
+  if (!int_expr(&base, node->child.base))
+    return false;
   
-  expr_t index = int_expr(scope, node->index.index);
-  if (!type_cmp(&index.type, &type_i32))
-    c_error(node->index.left_bracket, "array subscript is not an integer");
+  if (base.type.spec != SPEC_CLASS || base.type.size > 0) {
+    c_error(
+      node->child.child_ident,
+      "request for member '%s' in something non-class",
+      node->child.child_ident->data.ident);
+    return false;
+  }
   
-  base.type.size = 0;
-  base.loc += index.i32 * type_size_base(&base.type);
+  var_t *var = scope_find_var(&base.type.class->scope, node->child.child_ident->data.ident);
+  if (!var) {
+    c_error(
+      node->child.child_ident,
+      "'class %s' has no member named '%s'",
+      base.type.class->ident,
+      node->child.child_ident->data.ident);
+    return false;
+  }
   
-  if (type_cmp(&base.type, &type_i32))
-    base.i32 = *((int*) base.loc);
-  else if (type_cmp(&base.type, &type_f32))
-    base.f32 = *((float*) base.loc);
+  expr->type = var->type;
+  expr->loc = base.loc + var->loc;
+  mem_load(expr->loc, &expr->type, expr);
   
-  return base;
+  return true;
 }
 
-expr_t int_constant(map_t scope, const s_node_t *node)
+bool int_index(expr_t *expr, const s_node_t *node)
+{
+  expr_t base;
+  if (!int_expr(&base, node->index.base))
+    return false;
+  
+  if (!type_array(&base.type)) {
+    c_error(node->index.left_bracket, "subscripted value is not an array");
+    return false;
+  }
+  
+  expr_t index;
+  if (!int_expr(&index, node->index.index))
+    return false;
+  
+  if (!type_cmp(&index.type, &type_i32)) {
+    c_error(node->index.left_bracket, "array subscript is not an integer");
+    return false;
+  }
+  
+  *expr = base;
+  expr->type.size = 0;
+  expr->loc += index.i32 * type_size_base(&base.type);
+  mem_load(expr->loc, &expr->type, expr);
+  
+  return true;
+}
+
+bool int_constant(expr_t *expr, const s_node_t *node)
 {
   var_t *var;
-  expr_t expr;
   switch (node->constant.lexeme->token) {
   case TK_CONST_INTEGER:
-    expr.type = type_i32;
-    expr.i32 = node->constant.lexeme->data.i32;
-    expr.loc = NULL;
+    expr->type = type_i32;
+    expr->i32 = node->constant.lexeme->data.i32;
+    expr->loc = 0;
     break;
   case TK_CONST_FLOAT:
-    expr.type = type_f32;
-    expr.f32 = node->constant.lexeme->data.f32;
-    expr.loc = NULL;
+    expr->type = type_f32;
+    expr->f32 = node->constant.lexeme->data.f32;
+    expr->loc = 0;
     break;
   case TK_IDENTIFIER:
-    var = map_get(scope, node->constant.lexeme->data.ident);
+    var = scope_find_var(&scope, node->constant.lexeme->data.ident);
     
     if (!var) {
       c_error(
         node->constant.lexeme,
         "'%s' undeclared",
         node->constant.lexeme->data.ident);
+      return false;
     }
     
-    if (type_cmp(&var->type, &type_i32))
-      expr.i32 = *((int*) var->loc);
-    else if (type_cmp(&var->type, &type_f32))
-      expr.f32 = *((float*) var->loc);
-    
-    expr.loc = var->loc;
-    expr.type = var->type;
+    mem_load(var->loc, &var->type, expr);
     break;
   }
   
-  return expr;
+  return true;
 }
 
-static bool type_cmp(const type_t *a, const type_t *b)
+static void mem_load(int loc, const type_t *type, expr_t *expr)
 {
-  return a->spec == b->spec && a->size == b->size;
-}
-
-static bool type_array(const type_t *type)
-{
-  return type->size > 0;
-}
-
-static int type_size(const type_t *type)
-{
-  if (type->size > 0)
-    return type_size_base(type) * type->size;
-  else
-    return type_size_base(type);
-}
+  expr->loc = loc;
+  expr->type = *type;
   
-static int type_size_base(const type_t *type)
-{
-  switch (type->spec) {
-  case SPEC_I32:
-    return 4;
-  case SPEC_F32:
-    return 4;
-  }
+  if (type_cmp(type, &type_i32))
+    expr->i32 = *((int*) &mem_stack[loc]);
+  else if (type_cmp(type, &type_f32))
+    expr->f32 = *((float*) &mem_stack[loc]);
 }
 
-static char *mem_alloc(int size)
+static void mem_assign(int loc, const type_t *type, expr_t *expr)
 {
-  char *block = &mem_stack[mem_ptr];
-  mem_ptr += size;
-  return block;
+  if (type_cmp(type, &type_i32))
+    *((int*) &mem_stack[loc]) = expr->i32;
+  else if (type_cmp(type, &type_f32))
+    *((float*) &mem_stack[loc]) = expr->f32;
 }

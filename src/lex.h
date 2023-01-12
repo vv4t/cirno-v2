@@ -9,6 +9,11 @@ typedef enum {
   TK_IDENTIFIER,
   TK_I32,
   TK_F32,
+  TK_IF,
+  TK_CLASS,
+  TK_CLASS_DEF,
+  TK_PRINT,
+  TK_WHILE,
   TK_EOF
 } token_t;
 

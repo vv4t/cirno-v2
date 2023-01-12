@@ -3,7 +3,8 @@
 
 #include "data.h"
 #include "syntax.h"
+#include <stdbool.h>
 
-expr_t int_shell(const s_node_t *node);
+extern bool interpret(const s_node_t *node);
 
 #endif
