@@ -11,7 +11,7 @@ int main(int argc, char *argv[])
   lex_t lex = lex_parse("main.cn");
   s_node_t *node = s_parse(&lex);
   
-  // s_print_node(node);
+  s_print_node(node);
   if (!node)
     return 0;
   

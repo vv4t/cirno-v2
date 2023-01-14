@@ -14,6 +14,8 @@ typedef enum {
   TK_CLASS_DEF,
   TK_PRINT,
   TK_WHILE,
+  TK_PTR_OP,
+  TK_FN,
   TK_EOF
 } token_t;
 

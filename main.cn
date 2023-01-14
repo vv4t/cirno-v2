@@ -1,30 +1,13 @@
 {
-  i32 n = 32;
-  i32[32] prime;
-  
-  i32 i = 0;
-  while (i < n) {
-    prime[i] = 1;
-    i = i + 1;
+  fn main() : i32
+  {
+    i32 a;
+    print &a;
   }
   
-  i32 p = 2;
-  while (p * p < n) {
-    if (prime[p] > 0) {
-      i = p * p;
-      while (i < n) {
-        prime[i] = 0;
-        i = i + p;
-      }
-    }
-    
-    p = p + 1;
-  }
+  i32[4] a;
   
-  i = 0;
-  while (i < n) {
-    if (prime[i] > 0)
-      print i;
-    i = i + 1;
-  }
+  print &a[3];
+  
+  main();
 }

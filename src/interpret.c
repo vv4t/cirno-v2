@@ -2,6 +2,7 @@
 
 #include "log.h"
 
+static bool int_fn(scope_t *scope, const s_node_t *node);
 static bool int_stmt(scope_t *scope, const s_node_t *node);
 static bool int_print(scope_t *scope, const s_node_t *node);
 static bool int_if_stmt(scope_t *scope, const s_node_t *node);
@@ -12,15 +13,19 @@ static bool int_class_def(scope_t *scope, const s_node_t *node);
 static bool int_type(scope_t *scope, type_t *type, const s_node_t *node);
 
 static bool int_expr(scope_t *scope, expr_t *expr, const s_node_t *node);
+static bool int_unary(scope_t *scope, expr_t *expr, const s_node_t *node);
 static bool int_index(scope_t *scope, expr_t *expr, const s_node_t *node);
-static bool int_child(scope_t *scope, expr_t *expr, const s_node_t *node);
+static bool int_direct(scope_t *scope, expr_t *expr, const s_node_t *node);
+static bool int_indirect(scope_t *scope, expr_t *expr, const s_node_t *node);
+static bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node);
 static bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node);
 static bool int_constant(scope_t *scope, expr_t *expr, const s_node_t *node);
 
 static char mem_stack[512];
-static int  mem_ptr = 0;
 static void mem_load(int loc, const type_t *type, expr_t *expr);
 static void mem_assign(int loc, const type_t *type, expr_t *expr);
+
+static int  base_ptr = 0;
 
 bool interpret(const s_node_t *node)
 {
@@ -28,9 +33,7 @@ bool interpret(const s_node_t *node)
   scope_new(&scope);
   scope.size += 4;
   
-  int_stmt(&scope, node);
-  
-  return true;
+  return int_stmt(&scope, node);
 }
 
 bool int_stmt(scope_t *scope, const s_node_t *node)
@@ -42,7 +45,10 @@ bool int_stmt(scope_t *scope, const s_node_t *node)
     case S_BINOP:
     case S_CONSTANT:
     case S_INDEX:
-    case S_CHILD:
+    case S_DIRECT:
+    case S_INDIRECT:
+    case S_UNARY:
+    case S_PROC:
       if (!int_expr(scope, &expr, head->stmt.body))
         return false;
       break;
@@ -66,9 +72,25 @@ bool int_stmt(scope_t *scope, const s_node_t *node)
       if (!int_while_stmt(scope, head->stmt.body))
         return false;
       break;
+    case S_FN:
+      if (!int_fn(scope, head->stmt.body))
+        return false;
+      break;
     }
     head = head->stmt.next;
   }
+  
+  return true;
+}
+
+bool int_fn(scope_t *scope, const s_node_t *node)
+{
+  if (scope_find_fn(scope, node->fn.fn_ident->data.ident)) {
+    c_error(node->fn.fn_ident, "redefinition of function '%s'", node->fn.fn_ident->data.ident);
+    return false;
+  }
+  
+  scope_add_fn(scope, node->fn.body, node->fn.fn_ident->data.ident);
   
   return true;
 }
@@ -208,6 +230,8 @@ bool int_type(scope_t *scope, type_t *type, const s_node_t *node)
     break;
   }
   
+  type->is_ptr = node->type.ptr != NULL;
+  
   if (node->type.size) {
     expr_t size;
     
@@ -232,13 +256,79 @@ bool int_expr(scope_t *scope, expr_t *expr, const s_node_t *node)
   switch (node->node_type) {
   case S_BINOP:
     return int_binop(scope, expr, node);
+  case S_UNARY:
+    return int_unary(scope, expr, node);
   case S_INDEX:
     return int_index(scope, expr, node);
-  case S_CHILD:
-    return int_child(scope, expr, node);
+  case S_DIRECT:
+    return int_direct(scope, expr, node);
+  case S_INDIRECT:
+    return int_indirect(scope, expr, node);
+  case S_PROC:
+    return int_proc(scope, expr, node);
   case S_CONSTANT:
     return int_constant(scope, expr, node);
   }
+}
+
+bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
+{
+  fn_t *fn = scope_find_fn(scope, node->proc.func_ident->data.ident);
+  
+  if (!fn) {
+    c_error(
+      node->proc.func_ident,
+      "'%s' undeclared",
+      node->proc.func_ident->data.ident);
+    return false;
+  }
+  
+  scope_t new_scope;
+  scope_new(&new_scope);
+  new_scope.size += scope->size;
+  if (!int_stmt(&new_scope, fn->node))
+    return false;
+  scope_free(&new_scope);
+  
+  return true;
+}
+
+bool int_unary(scope_t *scope, expr_t *expr, const s_node_t *node)
+{
+  expr_t base;
+  switch (node->unary.op->token) {
+  case '&':
+    if (!int_expr(scope, &base, node->unary.rhs))
+      return false;
+    
+    if (!expr_lvalue(&base)) {
+      c_error(
+        node->unary.op,
+        "lvalue required as unary '&' operand");
+      return false;
+    }
+    
+    expr->type = base.type;
+    expr->type.is_ptr = true;
+    expr->i32 = base.loc;
+    
+    break;
+  case '*':
+    if (!int_expr(scope, &base, node->unary.rhs))
+      return false;
+    if (!type_ptr(&base.type)) {
+      c_error(
+        node->unary.op,
+        "pointer required as '*' operand");
+      return false;
+    }
+    
+    base.type.is_ptr = false;
+    mem_load(base.i32, &base.type, expr);
+    break;
+  }
+  
+  return true;
 }
 
 bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node)
@@ -251,7 +341,7 @@ bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node)
   if (!int_expr(scope, &rhs, node->binop.rhs))
     return false;
   
-  expr->loc = 0;
+  expr->loc = -1;
   if (type_cmp(&lhs.type, &type_i32) && type_cmp(&rhs.type, &type_i32)) {
     expr->type = type_i32;
     switch (node->binop.op->token) {
@@ -274,7 +364,7 @@ bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node)
       expr->i32 = lhs.i32 > rhs.i32;
       break;
     case '=':
-      if (!lhs.loc) {
+      if (!expr_lvalue(&lhs)) {
         c_error(node->binop.op, "lvalue required as left operand of assignment");
         return false;
       }
@@ -311,7 +401,7 @@ bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node)
       expr->i32 = lhs.f32 > rhs.f32;
       break;
     case '=':
-      if (!lhs.loc) {
+      if (!expr_lvalue(&lhs)) {
         c_error(node->binop.op, "lvalue required as left operand of assignment");
         return false;
       }
@@ -337,32 +427,63 @@ err_no_op: // i actually used a goto lol
   return true;
 }
 
-bool int_child(scope_t *scope, expr_t *expr, const s_node_t *node)
+bool int_direct(scope_t *scope, expr_t *expr, const s_node_t *node)
 {
   expr_t base;
-  if (!int_expr(scope, &base, node->child.base))
+  if (!int_expr(scope, &base, node->direct.base))
     return false;
   
-  if (base.type.spec != SPEC_CLASS || base.type.size > 0) {
+  if (base.type.spec != SPEC_CLASS || type_array(&base.type) || type_ptr(&base.type)) {
     c_error(
-      node->child.child_ident,
-      "request for member '%s' in something non-class",
-      node->child.child_ident->data.ident);
+      node->direct.child_ident,
+      "request for member '%s' in non-class",
+      node->direct.child_ident->data.ident);
     return false;
   }
   
-  var_t *var = scope_find_var(&base.type.class->scope, node->child.child_ident->data.ident);
+  var_t *var = scope_find_var(&base.type.class->scope, node->direct.child_ident->data.ident);
   if (!var) {
     c_error(
-      node->child.child_ident,
+      node->direct.child_ident,
       "'class %s' has no member named '%s'",
       base.type.class->ident,
-      node->child.child_ident->data.ident);
+      node->direct.child_ident->data.ident);
     return false;
   }
   
   expr->type = var->type;
   expr->loc = base.loc + var->loc;
+  mem_load(expr->loc, &expr->type, expr);
+  
+  return true;
+}
+
+bool int_indirect(scope_t *scope, expr_t *expr, const s_node_t *node)
+{
+  expr_t base;
+  if (!int_expr(scope, &base, node->direct.base))
+    return false;
+  
+  if (base.type.spec != SPEC_CLASS || type_array(&base.type) || !type_ptr(&base.type)) {
+    c_error(
+      node->direct.child_ident,
+      "request for member '%s' in non-class pointer",
+      node->direct.child_ident->data.ident);
+    return false;
+  }
+  
+  var_t *var = scope_find_var(&base.type.class->scope, node->direct.child_ident->data.ident);
+  if (!var) {
+    c_error(
+      node->direct.child_ident,
+      "'class %s' has no member named '%s'",
+      base.type.class->ident,
+      node->direct.child_ident->data.ident);
+    return false;
+  }
+  
+  expr->type = var->type;
+  expr->loc = base.i32 + var->loc;
   mem_load(expr->loc, &expr->type, expr);
   
   return true;
@@ -403,12 +524,12 @@ bool int_constant(scope_t *scope, expr_t *expr, const s_node_t *node)
   case TK_CONST_INTEGER:
     expr->type = type_i32;
     expr->i32 = node->constant.lexeme->data.i32;
-    expr->loc = 0;
+    expr->loc = -1;
     break;
   case TK_CONST_FLOAT:
     expr->type = type_f32;
     expr->f32 = node->constant.lexeme->data.f32;
-    expr->loc = 0;
+    expr->loc = -1;
     break;
   case TK_IDENTIFIER:
     var = scope_find_var(scope, node->constant.lexeme->data.ident);
@@ -433,7 +554,9 @@ static void mem_load(int loc, const type_t *type, expr_t *expr)
   expr->loc = loc;
   expr->type = *type;
   
-  if (type_cmp(type, &type_i32))
+  if (type_ptr(type))
+    expr->i32 = *((int*) &mem_stack[loc]);
+  else if (type_cmp(type, &type_i32))
     expr->i32 = *((int*) &mem_stack[loc]);
   else if (type_cmp(type, &type_f32))
     expr->f32 = *((float*) &mem_stack[loc]);
@@ -441,6 +564,8 @@ static void mem_load(int loc, const type_t *type, expr_t *expr)
 
 static void mem_assign(int loc, const type_t *type, expr_t *expr)
 {
+  if (type_ptr(type))
+    *((int*) &mem_stack[loc]) = expr->i32;
   if (type_cmp(type, &type_i32))
     *((int*) &mem_stack[loc]) = expr->i32;
   else if (type_cmp(type, &type_f32))
