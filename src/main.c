@@ -23,7 +23,7 @@ int main(int argc, char *argv[])
   
   bool err = interpret(ast_node);
   printf("status: %i\n", err);
-  
+  // ?
   // lex_free(&lex);
   
   return 0;
