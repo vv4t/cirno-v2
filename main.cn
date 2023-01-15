@@ -1,13 +1,4 @@
 {
-  fn main() : i32
-  {
-    i32 a;
-    print &a;
-  }
-  
-  i32[4] a;
-  
-  print &a[3];
-  
-  main();
+  i32 a;
+  (3 + 4) * 6;
 }
