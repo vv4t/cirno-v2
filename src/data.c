@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+type_t type_none = {0};
 type_t type_i32 = { .spec = SPEC_I32, .size = 0 };
 type_t type_f32 = { .spec = SPEC_F32, .size = 0 };
 
@@ -43,7 +44,7 @@ int type_size_base(const type_t *type)
   case SPEC_F32:
     return 4;
   case SPEC_CLASS:
-    return type->class->scope.size;
+    return type->class->size;
   }
 }
 
@@ -52,11 +53,47 @@ bool expr_lvalue(const expr_t *expr)
   return expr->loc != -1;
 }
 
-void scope_new(scope_t *scope)
+void class_new(class_t *class)
 {
+  class->map_var = map_new();
+  class->size = 0;
+}
+
+void class_free(class_t *class)
+{
+  map_flush(class->map_var);
+}
+
+var_t *class_add_var(class_t *class, const type_t *type, const char *ident)
+{
+  var_t *var = malloc(sizeof(var_t));
+  var->type = *type;
+  var->loc = class->size;
+  
+  class->size += type_size(type);
+  
+  map_put(class->map_var, ident, var);
+  
+  return var;
+}
+
+var_t *class_find_var(const class_t *class, const char *ident)
+{
+  return map_get(class->map_var, ident);
+}
+
+void scope_new(scope_t *scope, const type_t *ret_type, const scope_t *scope_parent)
+{
+  scope->scope_parent = scope_parent;
+  
   scope->map_var = map_new();
   scope->map_class = map_new();
   scope->map_fn = map_new();
+  
+  scope->ret_flag = false;
+  scope->ret_type = *ret_type;
+  scope->ret_value = (expr_t) {0};
+  
   scope->size = 0;
 }
 
@@ -82,14 +119,20 @@ var_t *scope_add_var(scope_t *scope, const type_t *type, const char *ident)
 
 var_t *scope_find_var(const scope_t *scope, const char *ident)
 {
-  return map_get(scope->map_var, ident);
+  var_t *var = map_get(scope->map_var, ident);
+  if (!var) {
+    if (!scope->scope_parent)
+      return NULL;
+    return scope_find_var(scope->scope_parent, ident);
+  }
+  
+  return var;
 }
 
-class_t *scope_add_class(scope_t *scope, const char *ident, const scope_t *class_scope)
+class_t *scope_add_class(scope_t *scope, const char *ident, const class_t *class_data)
 {
   class_t *class = malloc(sizeof(class_t));
-  class->scope = *class_scope;
-  class->ident = ident;
+  *class = *class_data;
   
   map_put(scope->map_class, ident, class);
   
@@ -98,13 +141,23 @@ class_t *scope_add_class(scope_t *scope, const char *ident, const scope_t *class
 
 class_t *scope_find_class(const scope_t *scope, const char *ident)
 {
-  return map_get(scope->map_class, ident);
+  class_t *class = map_get(scope->map_class, ident);
+  if (!class) {
+    if (!scope->scope_parent)
+      return NULL;
+    return scope_find_class(scope->scope_parent, ident);
+  }
+  
+  return class;
 }
 
-fn_t *scope_add_fn(scope_t *scope, s_node_t *node, const char *ident)
+fn_t *scope_add_fn(scope_t *scope, const type_t *type, s_node_t *param, s_node_t *node, const char *ident)
 {
   fn_t *fn = malloc(sizeof(fn_t));
   fn->node = node;
+  fn->param = param;
+  fn->type = *type;
+  fn->scope_parent = scope;
   
   map_put(scope->map_fn, ident, fn);
   
@@ -113,5 +166,12 @@ fn_t *scope_add_fn(scope_t *scope, s_node_t *node, const char *ident)
 
 fn_t *scope_find_fn(const scope_t *scope, const char *ident)
 {
-  return map_get(scope->map_fn, ident);
+  fn_t *fn = map_get(scope->map_fn, ident);
+  if (!fn) {
+    if (!scope->scope_parent)
+      return NULL;
+    return scope_find_fn(scope->scope_parent, ident);
+  }
+  
+  return fn;
 }

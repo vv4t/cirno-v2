@@ -16,6 +16,7 @@ typedef enum {
   TK_WHILE,
   TK_PTR_OP,
   TK_FN,
+  TK_RETURN,
   TK_EOF
 } token_t;
 

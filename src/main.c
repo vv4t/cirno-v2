@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "map.h"
 #include "log.h"
 #include "lex.h"
 #include "syntax.h"

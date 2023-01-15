@@ -70,6 +70,9 @@ static void expr_print(const expr_t *expr)
   }
   
   switch (expr->type.spec) {
+  case SPEC_NONE:
+    printf("(none)");
+    break;
   case SPEC_I32:
     printf("%i", expr->i32);
     break;
@@ -134,6 +137,7 @@ static void token_print(token_t token)
     "while",      // TK_WHILE
     "->",         // TK_PTR_OP
     "fn",         // TK_FN
+    "return",     // TK_RETURN
     "EOF"         // TK_EOF
   };
   

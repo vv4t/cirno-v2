@@ -1,4 +1,15 @@
 {
-  i32 a;
-  (3 + 4) * 6;
+  fn test(i32 n) : i32
+  {
+    if (n < 2)
+      return n;
+    
+    return test(n - 1) + test(n - 2);
+  }
+  
+  i32 i = 0;
+  while (i < 10) {
+    print test(i);
+    i = i + 1;
+  }
 }

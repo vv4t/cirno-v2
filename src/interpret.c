@@ -3,8 +3,10 @@
 #include "log.h"
 
 static bool int_fn(scope_t *scope, const s_node_t *node);
+static bool int_body(scope_t *scope, const s_node_t *node);
 static bool int_stmt(scope_t *scope, const s_node_t *node);
 static bool int_print(scope_t *scope, const s_node_t *node);
+static bool int_ret_stmt(scope_t *scope, const s_node_t *node);
 static bool int_if_stmt(scope_t *scope, const s_node_t *node);
 static bool int_while_stmt(scope_t *scope, const s_node_t *node);
 static bool int_decl(scope_t *scope, const s_node_t *node);
@@ -30,54 +32,66 @@ static int  base_ptr = 0;
 bool interpret(const s_node_t *node)
 {
   scope_t scope;
-  scope_new(&scope);
+  scope_new(&scope, &type_none, NULL);
   scope.size += 4;
   
-  return int_stmt(&scope, node);
+  return int_body(&scope, node);
+}
+
+bool int_body(scope_t *scope, const s_node_t *node)
+{
+  const s_node_t *head = node;
+  while (head && !scope->ret_flag) {
+    if (!int_stmt(scope, head))
+      return false;
+    head = head->stmt.next;
+  }
+  
+  return true;
 }
 
 bool int_stmt(scope_t *scope, const s_node_t *node)
 {
   expr_t expr;
-  const s_node_t *head = node;
-  while (head) {
-    switch (head->stmt.body->node_type) {
-    case S_BINOP:
-    case S_CONSTANT:
-    case S_INDEX:
-    case S_DIRECT:
-    case S_INDIRECT:
-    case S_UNARY:
-    case S_PROC:
-      if (!int_expr(scope, &expr, head->stmt.body))
-        return false;
-      break;
-    case S_DECL:
-      if (!int_decl(scope, head->stmt.body))
-        return false;
-      break;
-    case S_CLASS_DEF:
-      if (!int_class_def(scope, head->stmt.body))
-        return false;
-      break;
-    case S_PRINT:
-      if (!int_print(scope, head->stmt.body))
-        return false;
-      break;
-    case S_IF_STMT:
-      if (!int_if_stmt(scope, head->stmt.body))
-        return false;
-      break;
-    case S_WHILE_STMT:
-      if (!int_while_stmt(scope, head->stmt.body))
-        return false;
-      break;
-    case S_FN:
-      if (!int_fn(scope, head->stmt.body))
-        return false;
-      break;
-    }
-    head = head->stmt.next;
+  switch (node->stmt.body->node_type) {
+  case S_BINOP:
+  case S_CONSTANT:
+  case S_INDEX:
+  case S_DIRECT:
+  case S_INDIRECT:
+  case S_UNARY:
+  case S_PROC:
+    if (!int_expr(scope, &expr, node->stmt.body))
+      return false;
+    break;
+  case S_DECL:
+    if (!int_decl(scope, node->stmt.body))
+      return false;
+    break;
+  case S_CLASS_DEF:
+    if (!int_class_def(scope, node->stmt.body))
+      return false;
+    break;
+  case S_PRINT:
+    if (!int_print(scope, node->stmt.body))
+      return false;
+    break;
+  case S_IF_STMT:
+    if (!int_if_stmt(scope, node->stmt.body))
+      return false;
+    break;
+  case S_WHILE_STMT:
+    if (!int_while_stmt(scope, node->stmt.body))
+      return false;
+    break;
+  case S_FN:
+    if (!int_fn(scope, node->stmt.body))
+      return false;
+    break;
+  case S_RET_STMT:
+    if (!int_ret_stmt(scope, node->stmt.body))
+      return false;
+    break;
   }
   
   return true;
@@ -90,7 +104,18 @@ bool int_fn(scope_t *scope, const s_node_t *node)
     return false;
   }
   
-  scope_add_fn(scope, node->fn.body, node->fn.fn_ident->data.ident);
+  type_t type = type_none;
+  if (node->fn.type) {
+    if (!int_type(scope, &type, node->fn.type))
+      return false;
+  }
+  
+  scope_add_fn(
+    scope,
+    &type,
+    node->fn.param_decl,
+    node->fn.body,
+    node->fn.fn_ident->data.ident);
   
   return true;
 }
@@ -102,7 +127,7 @@ bool int_while_stmt(scope_t *scope, const s_node_t *node)
     return false;
   
   while (cond.i32 != 0) {
-    if (!int_stmt(scope, node->while_stmt.body))
+    if (!int_body(scope, node->while_stmt.body))
       return false;
     
     if (!int_expr(scope, &cond, node->while_stmt.cond))
@@ -119,9 +144,30 @@ bool int_if_stmt(scope_t *scope, const s_node_t *node)
     return false;
   
   if (cond.i32 != 0) {
-    if (!int_stmt(scope, node->if_stmt.body))
+    if (!int_body(scope, node->if_stmt.body))
       return false;
   }
+  
+  return true;
+}
+
+bool int_ret_stmt(scope_t *scope, const s_node_t *node)
+{
+  expr_t expr;
+  if (!int_expr(scope, &expr, node->ret_stmt.body))
+    return false;
+  
+  if (!type_cmp(&expr.type, &scope->ret_type)) {
+    c_error(
+      node->ret_stmt.ret_token,
+      "incompatible types when returning type '%z' but '%z' was expected",
+      &expr.type,
+      &scope->ret_type);
+    return false;
+  }
+  
+  scope->ret_flag = true;
+  scope->ret_value = expr;
   
   return true;
 }
@@ -144,17 +190,16 @@ bool int_class_def(scope_t *scope, const s_node_t *node)
     return false;
   }
   
-  scope_t class_scope;
-  scope_new(&class_scope);
+  class_t class;
+  class_new(&class);
   
   s_node_t *head = node->class_def.class_decl;
-  
   while (head) {
     type_t type;
     if (!int_type(scope, &type, head->class_decl.type))
       return false;
     
-    if (scope_find_var(&class_scope, head->class_decl.ident->data.ident)) {
+    if (class_find_var(&class, head->class_decl.ident->data.ident)) {
       c_error(
         node->class_def.ident,
         "redefinition of '%s' in class '%s'",
@@ -163,11 +208,11 @@ bool int_class_def(scope_t *scope, const s_node_t *node)
       return false;
     }
     
-    scope_add_var(&class_scope, &type, head->class_decl.ident->data.ident);
+    class_add_var(&class, &type, head->class_decl.ident->data.ident);
     head = head->class_decl.next;
   }
   
-  scope_add_class(scope, node->class_def.ident->data.ident, &class_scope);
+  scope_add_class(scope, node->class_def.ident->data.ident, &class);
   
   return true;
 }
@@ -284,10 +329,65 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
   }
   
   scope_t new_scope;
-  scope_new(&new_scope);
+  scope_new(&new_scope, &fn->type, fn->scope_parent);
+  new_scope.ret_type = fn->type;
   new_scope.size += scope->size;
-  if (!int_stmt(&new_scope, fn->node))
+  
+  s_node_t *arg = node->proc.arg;
+  s_node_t *head = fn->param;
+  while (head) {
+    if (!arg) {
+      c_error(
+        node->proc.func_ident,
+        "too few arguments to function '%s'",
+        node->proc.func_ident->data.ident);
+      return false;
+    }
+    
+    type_t type;
+    if (!int_type(&new_scope, &type, head->param_decl.type))
+      return false;
+    
+    expr_t arg_value;
+    if (!int_expr(scope, &arg_value, arg->arg.body))
+      return false;
+    
+    if (!type_cmp(&type, &arg_value.type)) {
+      c_error(
+        head->param_decl.ident,
+        "expected '%z' but argument is of type '%z'",
+        &type,
+        &arg_value.type);
+      return false;
+    }
+    
+    if (scope_find_var(&new_scope, head->param_decl.ident->data.ident)) {
+      c_error(
+        head->param_decl.ident,
+        "redefinition of param '%s'",
+        head->param_decl.ident->data.ident);
+      return false;
+    }
+    
+    var_t *var = scope_add_var(&new_scope, &type, head->param_decl.ident->data.ident);
+    mem_assign(var->loc, &var->type, &arg_value);
+    
+    head = head->param_decl.next;
+    arg = arg->arg.next;
+  }
+  
+  if (arg) {
+    c_error(
+      node->proc.func_ident,
+      "too many arguments to function '%s'",
+      node->proc.func_ident->data.ident);
     return false;
+  }
+  
+  if (!int_body(&new_scope, fn->node))
+    return false;
+  
+  *expr = new_scope.ret_value;
   scope_free(&new_scope);
   
   return true;
@@ -441,7 +541,7 @@ bool int_direct(scope_t *scope, expr_t *expr, const s_node_t *node)
     return false;
   }
   
-  var_t *var = scope_find_var(&base.type.class->scope, node->direct.child_ident->data.ident);
+  var_t *var = class_find_var(base.type.class, node->direct.child_ident->data.ident);
   if (!var) {
     c_error(
       node->direct.child_ident,
@@ -472,7 +572,7 @@ bool int_indirect(scope_t *scope, expr_t *expr, const s_node_t *node)
     return false;
   }
   
-  var_t *var = scope_find_var(&base.type.class->scope, node->direct.child_ident->data.ident);
+  var_t *var = class_find_var(base.type.class, node->direct.child_ident->data.ident);
   if (!var) {
     c_error(
       node->direct.child_ident,

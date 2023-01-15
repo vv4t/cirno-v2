@@ -16,8 +16,8 @@ struct entry_s {
   entry_t     *next;
 };
 
-static int      map_id = 0;
-static entry_t  *entry_dict[MAX_ENTRIES];
+static int      map_id = 1;
+static entry_t  *entry_dict[MAX_ENTRIES] = {0};
 
 map_t map_new()
 {
@@ -47,10 +47,10 @@ static hash_t hash_key(const char *key)
 
 void map_flush(map_t map)
 {
-  entry_t *prev_entry = NULL;
   for (int i = 0; i < MAX_ENTRIES; i++) {
     entry_t *entry = entry_dict[i];
     
+    entry_t *prev_entry = NULL;
     while (entry) {
       if (entry->map == map) {
         if (prev_entry)

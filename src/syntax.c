@@ -28,6 +28,7 @@ static s_node_t *s_body(lex_t *lex);
 static s_node_t *s_fn(lex_t *lex);
 static s_node_t *s_param_decl(lex_t *lex);
 static s_node_t *s_if_stmt(lex_t *lex);
+static s_node_t *s_ret_stmt(lex_t *lex);
 static s_node_t *s_while_stmt(lex_t *lex);
 static s_node_t *s_class_def(lex_t *lex);
 static s_node_t *s_class_decl(lex_t *lex);
@@ -73,6 +74,7 @@ static s_node_t *make_index(s_node_t *base, s_node_t *index, const lexeme_t *lef
 static s_node_t *make_direct(s_node_t *base, const lexeme_t *child_ident);
 static s_node_t *make_indirect(s_node_t *base, const lexeme_t *child_ident);
 static s_node_t *make_print(s_node_t *body);
+static s_node_t *make_ret_stmt(const lexeme_t *ret_token, s_node_t *body);
 static s_node_t *make_proc(const lexeme_t *func_ident, s_node_t *arg);
 static s_node_t *make_arg(s_node_t *body, s_node_t *next);
 static s_node_t *make_node(s_node_type_t type);
@@ -164,6 +166,10 @@ static s_node_t *s_stmt(lex_t *lex)
   if (node)
     return node;
   
+  node = s_ret_stmt(lex); 
+  if (node)
+    return node;
+  
   node = s_decl(lex); 
   if (node) {
     s_expect(lex, ';');
@@ -183,6 +189,18 @@ static s_node_t *s_stmt(lex_t *lex)
   }
   
   return NULL;
+}
+
+static s_node_t *s_ret_stmt(lex_t *lex)
+{
+  const lexeme_t *ret_token = NULL;
+  if (!(ret_token = lex_match(lex, TK_RETURN)))
+    return NULL;
+  
+  s_node_t *body = s_expect_rule(lex, R_EXPR);
+  s_expect(lex, ';');
+  
+  return make_ret_stmt(ret_token, body);
 }
 
 static s_node_t *s_while_stmt(lex_t *lex)
@@ -465,6 +483,14 @@ static s_node_t *make_while_stmt(s_node_t *cond, s_node_t *body)
   return node;
 }
 
+static s_node_t *make_ret_stmt(const lexeme_t *ret_token, s_node_t *body)
+{
+  s_node_t *node = make_node(S_RET_STMT);
+  node->ret_stmt.ret_token = ret_token;
+  node->ret_stmt.body = body;
+  return node;
+}
+
 static s_node_t *make_print(s_node_t *body)
 {
   s_node_t *node = make_node(S_PRINT);
@@ -569,7 +595,7 @@ static s_node_t *make_proc(const lexeme_t *func_ident, s_node_t *arg)
 
 static s_node_t *make_arg(s_node_t *body, s_node_t *next)
 {
-  s_node_t *node = make_node(S_PROC);
+  s_node_t *node = make_node(S_ARG);
   node->arg.body = body;
   node->arg.next = next;
   return node;
@@ -676,9 +702,13 @@ static void s_print_node_R(const s_node_t *node, int pad)
     s_print_node_R(node->proc.arg, pad + 2);
     break;
   case S_ARG:
-    LOG_DEBUG("%*sS_PROC", pad, "");
+    LOG_DEBUG("%*sS_ARG", pad, "");
     s_print_node_R(node->arg.body, pad + 2);
     s_print_node_R(node->arg.next, pad);
+    break;
+  case S_RET_STMT:
+    LOG_DEBUG("%*sS_RETURN", pad, "");
+    s_print_node_R(node->ret_stmt.body, pad + 2);
     break;
   }
 }
