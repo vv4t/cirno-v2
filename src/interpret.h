@@ -1,8 +1,10 @@
 #ifndef INTERPRET_H
 #define INTERPRET_H
 
-#include "ast.h"
+#include "data.h"
+#include "syntax.h"
+#include <stdbool.h>
 
-bool interpret(const ast_stmt_t *ast_stmt);
+extern bool interpret(const s_node_t *node);
 
 #endif

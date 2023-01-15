@@ -4,7 +4,6 @@
 #include "log.h"
 #include "lex.h"
 #include "syntax.h"
-#include "ast.h"
 #include "interpret.h"
 
 int main(int argc, char *argv[])
@@ -16,12 +15,7 @@ int main(int argc, char *argv[])
   if (!node)
     return 0;
   
-  ast_stmt_t *ast_node = ast_parse(node);
-  
-  if (!ast_node)
-    return 1;
-  
-  bool err = interpret(ast_node);
+  bool err = interpret(node);
   printf("status: %i\n", err);
   
   // lex_free(&lex);
