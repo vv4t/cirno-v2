@@ -8,6 +8,10 @@
 typedef struct class_s class_t;
 typedef struct scope_s scope_t;
 
+typedef struct {
+  int loc;
+} heap_data_t;
+
 typedef enum {
   SPEC_NONE,
   SPEC_I32,
@@ -19,13 +23,13 @@ typedef struct {
   spec_t  spec;
   class_t *class;
   int     size;
-  bool    is_ptr;
 } type_t;
 
 typedef struct {
   union {
     int   i32;
     float f32;
+    int   heap_id;
   };
   int     loc;
   type_t  type;
@@ -68,14 +72,14 @@ extern type_t type_i32;
 extern type_t type_f32;
 
 extern bool type_cmp(const type_t *a, const type_t *b);
+extern bool type_class(const type_t *type);
 extern bool type_array(const type_t *type);
-extern bool type_ptr(const type_t *type);
 extern int  type_size(const type_t *type);
 extern int  type_size_base(const type_t *type);
 
 extern bool expr_lvalue(const expr_t *expr);
 
-extern void     class_new(class_t *class);
+extern void     class_new(class_t *class, const char *ident);
 extern void     class_free(class_t *class);
 extern var_t    *class_add_var(class_t *class, const type_t *type, const char *ident);
 extern var_t    *class_find_var(const class_t *class, const char *ident);

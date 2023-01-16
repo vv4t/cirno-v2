@@ -32,6 +32,7 @@ static word_t word_table[] = {
   { "f32",        TK_F32        },
   { "fn",         TK_FN         },
   { "return",     TK_RETURN     },
+  { "new",        TK_NEW        },
   { "if",         TK_IF         }
 };
 

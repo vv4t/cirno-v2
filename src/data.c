@@ -10,19 +10,18 @@ type_t type_f32 = { .spec = SPEC_F32, .size = 0 };
 bool type_cmp(const type_t *a, const type_t *b)
 {
   return a->spec == b->spec
-        && a->is_ptr == b->is_ptr
         && a->size == b->size
         && a->class == b->class;
+}
+
+bool type_class(const type_t *type)
+{
+  return type->spec == SPEC_CLASS && type->size == 0;
 }
 
 bool type_array(const type_t *type)
 {
   return type->size > 0;
-}
-
-bool type_ptr(const type_t *type)
-{
-  return type->is_ptr && type->size == 0;
 }
 
 int type_size(const type_t *type)
@@ -35,16 +34,13 @@ int type_size(const type_t *type)
   
 int type_size_base(const type_t *type)
 {
-  if (type->is_ptr)
-    return 4;
-  
   switch (type->spec) {
   case SPEC_I32:
     return 4;
   case SPEC_F32:
     return 4;
   case SPEC_CLASS:
-    return type->class->size;
+    return 4;
   }
 }
 
@@ -53,10 +49,11 @@ bool expr_lvalue(const expr_t *expr)
   return expr->loc != -1;
 }
 
-void class_new(class_t *class)
+void class_new(class_t *class, const char *ident)
 {
   map_new(&class->map_var);
   class->size = 0;
+  class->ident = ident;
 }
 
 void class_free(class_t *class)

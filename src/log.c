@@ -64,11 +64,6 @@ static void c_printf(const char *fmt, va_list args)
 
 static void expr_print(const expr_t *expr)
 {
-  if (expr->type.is_ptr) {
-    printf("%i", expr->i32);
-    return;
-  }
-  
   switch (expr->type.spec) {
   case SPEC_NONE:
     printf("(none)");
@@ -93,8 +88,8 @@ static void type_print(const type_t *type)
   
   printf("%s", str_spec_table[type->spec]);
   
-  if (type->is_ptr)
-    putc('*', stdout);
+  if (type->spec == SPEC_CLASS)
+    printf(" %s", type->class->ident);
   
   if (type->size)
     printf("[%i]", type->size);
@@ -138,6 +133,7 @@ static void token_print(token_t token)
     "->",         // TK_PTR_OP
     "fn",         // TK_FN
     "return",     // TK_RETURN
+    "new",        // TK_NEW
     "EOF"         // TK_EOF
   };
   

@@ -18,14 +18,19 @@ static bool int_expr(scope_t *scope, expr_t *expr, const s_node_t *node);
 static bool int_unary(scope_t *scope, expr_t *expr, const s_node_t *node);
 static bool int_index(scope_t *scope, expr_t *expr, const s_node_t *node);
 static bool int_direct(scope_t *scope, expr_t *expr, const s_node_t *node);
-static bool int_indirect(scope_t *scope, expr_t *expr, const s_node_t *node);
 static bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node);
 static bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node);
 static bool int_constant(scope_t *scope, expr_t *expr, const s_node_t *node);
+static bool int_new(scope_t *scope, expr_t *expr, const s_node_t *node);
 
 static char mem_stack[512];
 static void mem_load(int loc, const type_t *type, expr_t *expr);
 static void mem_assign(int loc, const type_t *type, expr_t *expr);
+
+static heap_data_t  heap_data_table[8];
+static int          num_heap_data = 0;
+static int          heap_alloc(int size);
+static int          heap_ptr = 256;
 
 bool interpret(const s_node_t *node)
 {
@@ -67,9 +72,9 @@ bool int_stmt(scope_t *scope, const s_node_t *node)
   case S_CONSTANT:
   case S_INDEX:
   case S_DIRECT:
-  case S_INDIRECT:
   case S_UNARY:
   case S_PROC:
+  case S_NEW:
     if (!int_expr(scope, &expr, node->stmt.body))
       return false;
     break;
@@ -100,6 +105,9 @@ bool int_stmt(scope_t *scope, const s_node_t *node)
   case S_RET_STMT:
     if (!int_ret_stmt(scope, node->stmt.body))
       return false;
+    break;
+  default:
+    LOG_ERROR("unknown statement node_type (%i)", node->stmt.body->node_type);
     break;
   }
   
@@ -200,7 +208,7 @@ bool int_class_def(scope_t *scope, const s_node_t *node)
   }
   
   class_t class;
-  class_new(&class);
+  class_new(&class, node->class_def.ident->data.ident);
   
   s_node_t *head = node->class_def.class_decl;
   while (head) {
@@ -284,8 +292,6 @@ bool int_type(scope_t *scope, type_t *type, const s_node_t *node)
     break;
   }
   
-  type->is_ptr = node->type.ptr != NULL;
-  
   if (node->type.size) {
     expr_t size;
     
@@ -316,12 +322,15 @@ bool int_expr(scope_t *scope, expr_t *expr, const s_node_t *node)
     return int_index(scope, expr, node);
   case S_DIRECT:
     return int_direct(scope, expr, node);
-  case S_INDIRECT:
-    return int_indirect(scope, expr, node);
   case S_PROC:
     return int_proc(scope, expr, node);
   case S_CONSTANT:
     return int_constant(scope, expr, node);
+  case S_NEW:
+    return int_new(scope, expr, node);
+  default:
+    LOG_ERROR("unknown expr node_type (%i)", node->node_type);
+    return false;
   }
 }
 
@@ -406,37 +415,9 @@ bool int_unary(scope_t *scope, expr_t *expr, const s_node_t *node)
 {
   expr_t base;
   switch (node->unary.op->token) {
-  case '&':
-    if (!int_expr(scope, &base, node->unary.rhs))
-      return false;
-    
-    if (!expr_lvalue(&base)) {
-      c_error(
-        node->unary.op,
-        "lvalue required as unary '&' operand");
-      return false;
-    }
-    
-    expr->type = base.type;
-    expr->type.is_ptr = true;
-    expr->i32 = base.loc;
-    
-    break;
-  case '*':
-    if (!int_expr(scope, &base, node->unary.rhs))
-      return false;
-    if (!type_ptr(&base.type)) {
-      c_error(
-        node->unary.op,
-        "pointer required as '*' operand");
-      return false;
-    }
-    
-    base.type.is_ptr = false;
-    mem_load(base.i32, &base.type, expr);
+  default:
     break;
   }
-  
   return true;
 }
 
@@ -484,7 +465,7 @@ bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node)
       
       break;
     default:
-      goto err_no_op; // lol lmao
+      goto err_no_op;
     }
   } else if (type_cmp(&lhs.type, &type_f32) && type_cmp(&rhs.type, &type_f32)) {
     expr->type = type_f32;
@@ -521,10 +502,10 @@ bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node)
       
       break;
     default:
-      goto err_no_op; // lol lmao
+      goto err_no_op;
     }
   } else {
-err_no_op: // i actually used a goto lol
+err_no_op:
     c_error(
       node->binop.op,
       "unknown operand type for '%t': '%z' and '%z'",
@@ -542,7 +523,7 @@ bool int_direct(scope_t *scope, expr_t *expr, const s_node_t *node)
   if (!int_expr(scope, &base, node->direct.base))
     return false;
   
-  if (base.type.spec != SPEC_CLASS || type_array(&base.type) || type_ptr(&base.type)) {
+  if (base.type.spec != SPEC_CLASS || type_array(&base.type)) {
     c_error(
       node->direct.child_ident,
       "request for member '%s' in non-class",
@@ -561,38 +542,7 @@ bool int_direct(scope_t *scope, expr_t *expr, const s_node_t *node)
   }
   
   expr->type = var->type;
-  expr->loc = base.loc + var->loc;
-  mem_load(expr->loc, &expr->type, expr);
-  
-  return true;
-}
-
-bool int_indirect(scope_t *scope, expr_t *expr, const s_node_t *node)
-{
-  expr_t base;
-  if (!int_expr(scope, &base, node->direct.base))
-    return false;
-  
-  if (base.type.spec != SPEC_CLASS || type_array(&base.type) || !type_ptr(&base.type)) {
-    c_error(
-      node->direct.child_ident,
-      "request for member '%s' in non-class pointer",
-      node->direct.child_ident->data.ident);
-    return false;
-  }
-  
-  var_t *var = class_find_var(base.type.class, node->direct.child_ident->data.ident);
-  if (!var) {
-    c_error(
-      node->direct.child_ident,
-      "'class %s' has no member named '%s'",
-      base.type.class->ident,
-      node->direct.child_ident->data.ident);
-    return false;
-  }
-  
-  expr->type = var->type;
-  expr->loc = base.i32 + var->loc;
+  expr->loc = heap_data_table[base.heap_id].loc + var->loc;
   mem_load(expr->loc, &expr->type, expr);
   
   return true;
@@ -622,6 +572,29 @@ bool int_index(scope_t *scope, expr_t *expr, const s_node_t *node)
   expr->type.size = 0;
   expr->loc += index.i32 * type_size_base(&base.type);
   mem_load(expr->loc, &expr->type, expr);
+  
+  return true;
+}
+
+bool int_new(scope_t *scope, expr_t *expr, const s_node_t *node)
+{
+  class_t *class = scope_find_class(scope, node->new.class_ident->data.ident);
+  
+  if (!class) {
+    c_error(
+      node->new.class_ident,
+      "undeclared class '%s'",
+      node->new.class_ident->data.ident);
+    return false;
+  }
+  
+  int heap_id = heap_alloc(class->size);
+  
+  expr->type.spec = SPEC_CLASS;
+  expr->type.size = 0;
+  expr->type.class = class;
+  expr->heap_id = heap_id;
+  expr->loc = -1;
   
   return true;
 }
@@ -663,8 +636,8 @@ static void mem_load(int loc, const type_t *type, expr_t *expr)
   expr->loc = loc;
   expr->type = *type;
   
-  if (type_ptr(type))
-    expr->i32 = *((int*) &mem_stack[loc]);
+  if (type_class(type))
+    expr->heap_id = *((int*) &mem_stack[loc]);
   else if (type_cmp(type, &type_i32))
     expr->i32 = *((int*) &mem_stack[loc]);
   else if (type_cmp(type, &type_f32))
@@ -673,10 +646,22 @@ static void mem_load(int loc, const type_t *type, expr_t *expr)
 
 static void mem_assign(int loc, const type_t *type, expr_t *expr)
 {
-  if (type_ptr(type))
-    *((int*) &mem_stack[loc]) = expr->i32;
+  if (type_class(type))
+    *((int*) &mem_stack[loc]) = expr->heap_id;
   if (type_cmp(type, &type_i32))
     *((int*) &mem_stack[loc]) = expr->i32;
   else if (type_cmp(type, &type_f32))
     *((float*) &mem_stack[loc]) = expr->f32;
+}
+
+static int heap_alloc(int size)
+{
+  int heap_id = num_heap_data;
+  heap_data_t *heap_data = &heap_data_table[heap_id];
+  heap_data->loc = heap_ptr;
+  
+  heap_ptr += size;
+  num_heap_data++;
+  
+  return heap_id;
 }

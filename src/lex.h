@@ -17,6 +17,7 @@ typedef enum {
   TK_PTR_OP,
   TK_FN,
   TK_RETURN,
+  TK_NEW,
   TK_EOF
 } token_t;
 

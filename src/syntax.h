@@ -13,7 +13,6 @@ typedef enum {
   S_STMT,
   S_INDEX,
   S_DIRECT,
-  S_INDIRECT,
   S_UNARY,
   S_PRINT,
   S_FN,
@@ -22,6 +21,7 @@ typedef enum {
   S_WHILE_STMT,
   S_RET_STMT,
   S_PROC,
+  S_NEW,
   S_ARG
 } s_node_type_t;
 
@@ -36,7 +36,6 @@ typedef struct s_node_s {
     } constant;
     struct {
       const lexeme_t  *spec;
-      const lexeme_t  *ptr;
       struct s_node_s *size;
       const lexeme_t  *class_ident;
     } type;
@@ -67,10 +66,6 @@ typedef struct s_node_s {
       struct s_node_s *base;
       const lexeme_t  *child_ident;
     } direct;
-    struct {
-      struct s_node_s *base;
-      const lexeme_t  *child_ident;
-    } indirect;
     struct {
       struct s_node_s *base;
       struct s_node_s *index;
@@ -110,6 +105,9 @@ typedef struct s_node_s {
       struct s_node_s *body;
       struct s_node_s *next;
     } arg;
+    struct {
+      const lexeme_t  *class_ident;
+    } new;
   };
   s_node_type_t node_type;
 } s_node_t;
