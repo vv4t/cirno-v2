@@ -115,6 +115,7 @@ typedef struct s_node_s {
 } s_node_t;
 
 extern s_node_t *s_parse(lex_t *lex);
+extern void s_free(s_node_t *node);
 extern void s_print_node(const s_node_t *node);
 
 #endif

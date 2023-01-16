@@ -1,8 +1,9 @@
 #include "lex.h"
 
 #include "log.h"
-#include <stdlib.h>
+#include "zone.h"
 #include <ctype.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct {
@@ -80,7 +81,7 @@ lex_t lex_parse(const char *src)
   fseek(fp, 0, SEEK_END);
   size_t size = ftell(fp);
   fseek(fp, 0, SEEK_SET);
-  char *buffer = malloc(size + 1);
+  char *buffer = ZONE_ALLOC(size + 1);
   fread(buffer, 1, size, fp);
   buffer[size] = 0;
   fclose(fp);
@@ -126,11 +127,31 @@ lex_t lex_parse(const char *src)
   
   lex_t lex = {
     .src = src,
+    .buffer = buffer,
     .lexeme = body,
+    .start = body,
     .eof_line = lex_file.line
   };
   
   return lex;
+}
+
+void lex_free(lex_t *lex)
+{
+  ZONE_FREE(lex->buffer);
+  
+  lexeme_t *lexeme = lex->start;
+  while (lexeme) {
+    switch (lexeme->token) {
+    case TK_IDENTIFIER:
+      ZONE_FREE(lexeme->data.ident);
+      break;
+    }
+    
+    lexeme_t *next = lexeme->next;
+    ZONE_FREE(lexeme);
+    lexeme = next;
+  }
 }
 
 void lex_next(lex_t *lex)
@@ -158,7 +179,7 @@ const lexeme_t *lex_match(lex_t *lex, token_t token)
 
 static lexeme_t *make_lexeme(token_t token, const lex_file_t *lex)
 {
-  lexeme_t *lexeme = malloc(sizeof(lexeme_t));
+  lexeme_t *lexeme = ZONE_ALLOC(sizeof(lexeme_t));
   lexeme->token = token;
   lexeme->line = lex->line;
   lexeme->src = lex->file;
@@ -218,7 +239,7 @@ static lexeme_t *match_word(lex_file_t *lex)
       return make_lexeme(word_table[i].tk, lex);
   
   int str_len = strlen(word) + 1;
-  char *str_ident = malloc(str_len);
+  char *str_ident = ZONE_ALLOC(str_len);
   memcpy(str_ident, word, str_len);
   
   lexeme_t *lexeme = make_lexeme(TK_IDENTIFIER, lex);

@@ -23,9 +23,9 @@ typedef enum {
 typedef struct lexeme_s {
   token_t token;
   union {
-    int         i32;
-    float       f32;
-    const char  *ident;
+    int     i32;
+    float   f32;
+    char    *ident;
   } data;
   int             line;
   const char      *src;
@@ -33,13 +33,17 @@ typedef struct lexeme_s {
 } lexeme_t;
 
 typedef struct {
-  const char      *src;
-  const lexeme_t  *lexeme;
-  int             eof_line;
+  const char  *src;
+  char        *buffer;
+  lexeme_t    *lexeme;
+  lexeme_t    *start;
+  int         eof_line;
 } lex_t;
 
 extern lex_t          lex_parse(const char *src);
 extern const lexeme_t *lex_match(lex_t *lex, token_t);
-extern void           lex_next(lex_t *next);
+extern void           lex_next(lex_t *lex);
+extern void           lex_free(lex_t *lex);
+
 
 #endif

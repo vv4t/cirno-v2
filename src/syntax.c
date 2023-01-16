@@ -1,10 +1,9 @@
 #include "syntax.h"
 
 #include "log.h"
-
+#include "zone.h"
 #include <stddef.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <stdbool.h>
 
 static bool s_err = false;
@@ -81,10 +80,24 @@ static s_node_t *make_node(s_node_type_t type);
 
 s_node_t *s_parse(lex_t *lex)
 {
-  s_node_t *node = s_body(lex);
+  s_node_t *body = NULL;
+  s_node_t *head = NULL;
+  
+  s_node_t *stmt_body = s_stmt(lex);
+  
+  while (stmt_body) {
+    if (head)
+      head = head->stmt.next = make_stmt(stmt_body, NULL);
+    else
+      body = head = make_stmt(stmt_body, NULL);
+    
+    stmt_body = s_stmt(lex);
+  }
+  
   if (s_err)
     return NULL;
-  return node;
+  
+  return body;
 }
 
 static s_node_t *s_body(lex_t *lex)
@@ -610,7 +623,7 @@ static s_node_t *make_constant(const lexeme_t *lexeme)
 
 static s_node_t *make_node(s_node_type_t node_type)
 {
-  s_node_t *node = malloc(sizeof(s_node_t));
+  s_node_t *node = ZONE_ALLOC(sizeof(s_node_t));
   *node = (s_node_t) { 0 };
   node->node_type = node_type;
   return node;
@@ -679,7 +692,6 @@ static void s_print_node_R(const s_node_t *node, int pad)
     s_print_node_R(node->print.body, pad + 2);
     break;
   case S_DIRECT:
-    LOG_DEBUG("%*sS_DIRECT", pad, "");
     s_print_node_R(node->direct.base, pad + 2);
     break;
   case S_INDIRECT:
@@ -710,10 +722,94 @@ static void s_print_node_R(const s_node_t *node, int pad)
     LOG_DEBUG("%*sS_RETURN", pad, "");
     s_print_node_R(node->ret_stmt.body, pad + 2);
     break;
+  default:
+    LOG_ERROR("unknown s_node_t (%i)", node->node_type);
+    break;
   }
 }
 
 void s_print_node(const s_node_t *node)
 {
   s_print_node_R(node, 0);
+}
+
+void s_free(s_node_t *node)
+{
+  if (!node)
+    return;
+  
+  switch (node->node_type) {
+  case S_CONSTANT:
+    break;
+  case S_BINOP:
+    s_free(node->binop.lhs);
+    s_free(node->binop.rhs);
+    break;
+  case S_TYPE:
+    s_free(node->type.size);
+    break;
+  case S_DECL:
+    s_free(node->decl.type);
+    s_free(node->decl.init);
+    break;
+  case S_CLASS_DEF:
+    s_free(node->class_def.class_decl);
+    break;
+  case S_CLASS_DECL:
+    s_free(node->class_decl.type);
+    s_free(node->class_decl.next);
+    break;
+  case S_INDEX:
+    s_free(node->index.base);
+    s_free(node->index.index);
+    break;
+  case S_STMT:
+    s_free(node->stmt.body);
+    s_free(node->stmt.next);
+    break;
+  case S_IF_STMT:
+    s_free(node->if_stmt.cond);
+    s_free(node->if_stmt.body);
+    break;
+  case S_UNARY:
+    s_free(node->unary.rhs);
+    break;
+  case S_WHILE_STMT:
+    s_free(node->while_stmt.cond);
+    s_free(node->while_stmt.body);
+    break;
+  case S_PRINT:
+    s_free(node->print.body);
+    break;
+  case S_DIRECT:
+    s_free(node->direct.base);
+    break;
+  case S_INDIRECT:
+    s_free(node->direct.base);
+    break;
+  case S_FN:
+    s_free(node->fn.param_decl);
+    s_free(node->fn.type);
+    s_free(node->fn.body);
+    break;
+  case S_PARAM_DECL:
+    s_free(node->class_decl.type);
+    s_free(node->class_decl.next);
+    break;
+  case S_PROC:
+    s_free(node->proc.arg);
+    break;
+  case S_ARG:
+    s_free(node->arg.body);
+    s_free(node->arg.next);
+    break;
+  case S_RET_STMT:
+    s_free(node->ret_stmt.body);
+    break;
+  default:
+    LOG_ERROR("unknown s_node_t (%i)", node->node_type);
+    break;
+  }
+  
+  ZONE_FREE(node);
 }

@@ -1,7 +1,7 @@
 #include "map.h"
 
+#include "zone.h"
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #define MAX_ENTRIES 1021
@@ -26,7 +26,7 @@ map_t map_new()
 
 static entry_t *new_entry(int map, const char *key, void *value)
 {
-  entry_t *entry = malloc(sizeof(entry_t));
+  entry_t *entry = ZONE_ALLOC(sizeof(entry_t));
   entry->map = map;
   entry->key = key;
   entry->value = value;
@@ -58,7 +58,8 @@ void map_flush(map_t map)
         else
           entry_dict[i] = entry->next;
         
-        free(entry);
+        ZONE_FREE(entry);
+        ZONE_FREE(entry->value);
       }
       
       prev_entry = entry;

@@ -1,7 +1,7 @@
 #include "data.h"
 
+#include "zone.h"
 #include <stdio.h>
-#include <stdlib.h>
 
 type_t type_none = {0};
 type_t type_i32 = { .spec = SPEC_I32, .size = 0 };
@@ -66,7 +66,7 @@ void class_free(class_t *class)
 
 var_t *class_add_var(class_t *class, const type_t *type, const char *ident)
 {
-  var_t *var = malloc(sizeof(var_t));
+  var_t *var = ZONE_ALLOC(sizeof(var_t));
   var->type = *type;
   var->loc = class->size;
   
@@ -93,8 +93,10 @@ void scope_new(scope_t *scope, const type_t *ret_type, const scope_t *scope_pare
   scope->ret_flag = false;
   scope->ret_type = *ret_type;
   scope->ret_value = (expr_t) {0};
-  
   scope->size = 0;
+  
+  if (scope_parent)
+    scope->size += scope_parent->size;
 }
 
 void scope_free(scope_t *scope)
@@ -106,7 +108,7 @@ void scope_free(scope_t *scope)
 
 var_t *scope_add_var(scope_t *scope, const type_t *type, const char *ident)
 {
-  var_t *var = malloc(sizeof(var_t));
+  var_t *var = ZONE_ALLOC(sizeof(var_t));
   var->type = *type;
   var->loc = scope->size;
   
@@ -131,7 +133,7 @@ var_t *scope_find_var(const scope_t *scope, const char *ident)
 
 class_t *scope_add_class(scope_t *scope, const char *ident, const class_t *class_data)
 {
-  class_t *class = malloc(sizeof(class_t));
+  class_t *class = ZONE_ALLOC(sizeof(class_t));
   *class = *class_data;
   
   map_put(scope->map_class, ident, class);
@@ -153,7 +155,7 @@ class_t *scope_find_class(const scope_t *scope, const char *ident)
 
 fn_t *scope_add_fn(scope_t *scope, const type_t *type, s_node_t *param, s_node_t *node, const char *ident)
 {
-  fn_t *fn = malloc(sizeof(fn_t));
+  fn_t *fn = ZONE_ALLOC(sizeof(fn_t));
   fn->node = node;
   fn->param = param;
   fn->type = *type;

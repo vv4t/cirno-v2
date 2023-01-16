@@ -27,25 +27,33 @@ static char mem_stack[512];
 static void mem_load(int loc, const type_t *type, expr_t *expr);
 static void mem_assign(int loc, const type_t *type, expr_t *expr);
 
-static int  base_ptr = 0;
-
 bool interpret(const s_node_t *node)
 {
   scope_t scope;
   scope_new(&scope, &type_none, NULL);
-  scope.size += 4;
   
-  return int_body(&scope, node);
+  bool err = int_body(&scope, node);
+  scope_free(&scope);
+  
+  return err;
 }
 
 bool int_body(scope_t *scope, const s_node_t *node)
 {
+  scope_t new_scope;
+  scope_new(&new_scope, &scope->ret_type, scope);
+  
   const s_node_t *head = node;
-  while (head && !scope->ret_flag) {
-    if (!int_stmt(scope, head))
+  while (head && !new_scope.ret_flag) {
+    if (!int_stmt(&new_scope, head))
       return false;
     head = head->stmt.next;
   }
+  
+  scope->ret_flag = new_scope.ret_flag;
+  scope->ret_value = new_scope.ret_value;
+  
+  scope_free(&new_scope);
   
   return true;
 }
@@ -331,7 +339,6 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
   scope_t new_scope;
   scope_new(&new_scope, &fn->type, fn->scope_parent);
   new_scope.ret_type = fn->type;
-  new_scope.size += scope->size;
   
   s_node_t *arg = node->proc.arg;
   s_node_t *head = fn->param;
