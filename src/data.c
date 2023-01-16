@@ -7,6 +7,11 @@ type_t type_none = {0};
 type_t type_i32 = { .spec = SPEC_I32, .size = 0 };
 type_t type_f32 = { .spec = SPEC_F32, .size = 0 };
 
+static void _zone_free(void *block)
+{
+  ZONE_FREE(block);
+}
+
 bool type_cmp(const type_t *a, const type_t *b)
 {
   return a->spec == b->spec
@@ -58,7 +63,13 @@ void class_new(class_t *class, const char *ident)
 
 void class_free(class_t *class)
 {
-  map_flush(&class->map_var);
+  map_flush(&class->map_var, _zone_free);
+  ZONE_FREE(class);
+}
+
+static void _class_free(void *block)
+{
+  class_free((class_t*) block);
 }
 
 var_t *class_add_var(class_t *class, const type_t *type, const char *ident)
@@ -82,6 +93,7 @@ var_t *class_find_var(const class_t *class, const char *ident)
 void scope_new(scope_t *scope, const type_t *ret_type, const scope_t *scope_parent)
 {
   scope->scope_parent = scope_parent;
+  scope->scope_child  = NULL;
   
   map_new(&scope->map_var);
   map_new(&scope->map_class);
@@ -95,15 +107,9 @@ void scope_new(scope_t *scope, const type_t *ret_type, const scope_t *scope_pare
 
 void scope_free(scope_t *scope)
 {
-  entry_t *entry_class = scope->map_class.start;
-  while (entry_class) {
-    class_free((class_t*) entry_class->value);
-    entry_class = entry_class->s_next;
-  }
-  
-  map_flush(&scope->map_var);
-  map_flush(&scope->map_class);
-  map_flush(&scope->map_fn);
+  map_flush(&scope->map_class, _class_free);
+  map_flush(&scope->map_var, _zone_free);
+  map_flush(&scope->map_fn, _zone_free);
 }
 
 var_t *scope_add_var(scope_t *scope, const type_t *type, const char *ident)

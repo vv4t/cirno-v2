@@ -44,7 +44,7 @@ static entry_t *new_entry(map_t *map, const char *key, void *value, int id)
   return entry;
 }
 
-void map_flush(map_t *map)
+void map_flush(map_t *map, void (*fn_free)(void *block))
 {
   entry_t *entry = map->start;
   
@@ -59,7 +59,7 @@ void map_flush(map_t *map)
     if (entry == entry_dict[entry->id])
       entry_dict[entry->id] = entry->h_next;
     
-    ZONE_FREE(entry->value);
+    fn_free(entry->value);
     ZONE_FREE(entry);
     
     entry = next;

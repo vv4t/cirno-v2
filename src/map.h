@@ -21,7 +21,7 @@ typedef struct {
 } map_t;
 
 void  map_new(map_t *map);
-void  map_flush(map_t *map);
+void  map_flush(map_t *map, void (*fn_free)(void *block));
 void  *map_get(const map_t *map, const char *key);
 bool  map_put(map_t *map, const char *key, void *value);
 

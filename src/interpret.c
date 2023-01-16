@@ -31,20 +31,25 @@ static void mem_assign(int loc, const type_t *type, expr_t *expr);
 static int  stack_start = 0;
 static int  stack_end = 256;
 
-static heap_block_t  heap_block_table[8];
-static int          num_heap_block = 0;
+#define MAX_HEAP_BLOCK 8
+static heap_block_t  heap_block_table[MAX_HEAP_BLOCK];
 
 static heap_block_t  *heap_alloc(int size);
 static int          heap_ptr = 256;
+static void         heap_clean();
+static void         heap_clean_R(scope_t *scope);
+
+static scope_t      scope_global;
 
 bool interpret(const s_node_t *node)
 {
-  scope_t scope;
-  scope_new(&scope, &type_none, NULL);
-  scope.size += stack_start;
+  scope_new(&scope_global, &type_none, NULL);
+  scope_global.size += stack_start;
   
-  bool err = int_body(&scope, node);
-  scope_free(&scope);
+  bool err = int_body(&scope_global, node);
+  
+  scope_free(&scope_global);
+  scope_global.scope_child = NULL;
   
   return err;
 }
@@ -55,10 +60,13 @@ bool int_body(scope_t *scope, const s_node_t *node)
   scope_new(&new_scope, &scope->ret_type, scope);
   new_scope.size = scope->size;
   
+  scope->scope_child = &new_scope;
+  
   const s_node_t *head = node;
   while (head && !new_scope.ret_flag) {
     if (!int_stmt(&new_scope, head)) {
       scope_free(&new_scope);
+      scope->scope_child = NULL;
       return false;
     }
     
@@ -69,6 +77,7 @@ bool int_body(scope_t *scope, const s_node_t *node)
   scope->ret_value = new_scope.ret_value;
   
   scope_free(&new_scope);
+  scope->scope_child = NULL;
   
   return true;
 }
@@ -255,6 +264,7 @@ bool int_decl(scope_t *scope, const s_node_t *node)
     return false;
   
   var_t *var = scope_add_var(scope, &type, node->decl.ident->data.ident);
+  *((unsigned long long*) &mem_zone[var->loc]) = 0;
   
   if (scope->size >= stack_end) {
     LOG_ERROR("ran out of memory %i/%i", scope->size, stack_end);
@@ -365,6 +375,8 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
   new_scope.ret_type = fn->type;
   new_scope.size += scope->size;
   
+  scope->scope_child = &new_scope;
+  
   s_node_t *arg = node->proc.arg;
   s_node_t *head = fn->param;
   while (head) {
@@ -419,11 +431,13 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
   if (!int_body(&new_scope, fn->node)) {
 err_cleanup:
     scope_free(&new_scope);
+    scope->scope_child = NULL;
     return false;
   }
   
   *expr = new_scope.ret_value;
   scope_free(&new_scope);
+  scope->scope_child = NULL;
   
   return true;
 }
@@ -605,6 +619,8 @@ bool int_new(scope_t *scope, expr_t *expr, const s_node_t *node)
     return false;
   }
   
+  heap_clean();
+  
   expr->type.spec = SPEC_CLASS;
   expr->type.size = 0;
   expr->type.class = class;
@@ -663,7 +679,7 @@ static void mem_assign(int loc, const type_t *type, expr_t *expr)
 {
   if (type_class(type))
     *((unsigned long long*) &mem_zone[loc]) = (unsigned long long) expr->heap_block;
-  if (type_cmp(type, &type_i32))
+  else if (type_cmp(type, &type_i32))
     *((int*) &mem_zone[loc]) = expr->i32;
   else if (type_cmp(type, &type_f32))
     *((float*) &mem_zone[loc]) = expr->f32;
@@ -671,11 +687,57 @@ static void mem_assign(int loc, const type_t *type, expr_t *expr)
 
 static heap_block_t *heap_alloc(int size)
 {
-  heap_block_t *heap_block = &heap_block_table[num_heap_block];
+  heap_block_t *heap_block = NULL;
+  for (int i = 0; i < MAX_HEAP_BLOCK; i++) {
+    if (!heap_block_table[i].use)
+      heap_block = &heap_block_table[i];
+  }
+  
+  if (!heap_block) {
+    LOG_ERROR("ran out of memory");
+    return NULL;
+  }
+  
   heap_block->loc = heap_ptr;
+  heap_block->use = false;
   
   heap_ptr += size;
-  num_heap_block++;
   
   return heap_block;
+}
+
+static void heap_clean()
+{
+  for (int i = 0; i < MAX_HEAP_BLOCK; i++)
+    heap_block_table[i].use = false;
+  
+  heap_clean_R(&scope_global);
+  
+  for (int i = 0; i < MAX_HEAP_BLOCK; i++) {
+    if (!heap_block_table[i].use && heap_block_table[i].loc) {
+      LOG_DEBUG("%i", heap_block_table[i].loc);
+    }
+  }
+}
+
+static void heap_clean_R(scope_t *scope)
+{
+  if (!scope)
+    return;
+  
+  entry_t *entry = scope->map_var.start;
+  while (entry) {
+    var_t *var = (var_t*) entry->value;
+    
+    if (type_class(&var->type)) {
+      expr_t expr;
+      mem_load(var->loc, &var->type, &expr);
+      if (expr.heap_block)
+        expr.heap_block->use = true;
+    }
+    
+    entry = entry->s_next;
+  }
+  
+  heap_clean_R(scope->scope_child);
 }

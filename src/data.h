@@ -9,7 +9,8 @@ typedef struct class_s class_t;
 typedef struct scope_s scope_t;
 
 typedef struct {
-  int loc;
+  int   loc;
+  bool  use;
 } heap_block_t;
 
 typedef enum {
@@ -37,6 +38,7 @@ typedef struct {
 
 struct scope_s {
   const scope_t *scope_parent;
+  scope_t       *scope_child;
   
   map_t   map_fn;
   map_t   map_var;
@@ -55,6 +57,7 @@ struct class_s {
   const char  *ident;
 };
 
+// HAHA THE OVERHEADS ITS LIKE 50B FOR ONE VARIABLE
 typedef struct {
   type_t  type;
   int     loc;
