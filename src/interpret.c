@@ -42,6 +42,7 @@ bool int_body(scope_t *scope, const s_node_t *node)
 {
   scope_t new_scope;
   scope_new(&new_scope, &scope->ret_type, scope);
+  new_scope.size = scope->size;
   
   const s_node_t *head = node;
   while (head && !new_scope.ret_flag) {
@@ -339,6 +340,7 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
   scope_t new_scope;
   scope_new(&new_scope, &fn->type, fn->scope_parent);
   new_scope.ret_type = fn->type;
+  new_scope.size += scope->size;
   
   s_node_t *arg = node->proc.arg;
   s_node_t *head = fn->param;

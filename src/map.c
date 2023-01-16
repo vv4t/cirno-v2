@@ -7,32 +7,9 @@
 #define MAX_ENTRIES 1021
 
 typedef unsigned int hash_t;
-typedef struct entry_s entry_t;
-
-struct entry_s {
-  void        *value;
-  map_t       map;
-  const char  *key;
-  entry_t     *next;
-};
 
 static int      map_id = 1;
 static entry_t  *entry_dict[MAX_ENTRIES] = {0};
-
-map_t map_new()
-{
-  return map_id++;
-}
-
-static entry_t *new_entry(int map, const char *key, void *value)
-{
-  entry_t *entry = ZONE_ALLOC(sizeof(entry_t));
-  entry->map = map;
-  entry->key = key;
-  entry->value = value;
-  entry->next = NULL;
-  return entry;
-}
 
 static hash_t hash_key(const char *key)
 {
@@ -45,52 +22,81 @@ static hash_t hash_key(const char *key)
   return hash;
 }
 
-void map_flush(map_t map)
+void map_new(map_t *map)
 {
-  for (int i = 0; i < MAX_ENTRIES; i++) {
-    entry_t *entry = entry_dict[i];
+  map->map_id = map_id++;
+  map->start = NULL;
+}
+
+static entry_t *new_entry(map_t *map, const char *key, void *value, int id)
+{
+  entry_t *entry = ZONE_ALLOC(sizeof(entry_t));
+  entry->value = value;
+  entry->map_id = map->map_id;
+  entry->key = key;
+  entry->id = id % MAX_ENTRIES;
+  
+  entry->h_next = NULL;
+  entry->h_prev = NULL;
+  
+  entry->s_next = NULL;
+  
+  return entry;
+}
+
+void map_flush(map_t *map)
+{
+  entry_t *entry = map->start;
+  
+  while (entry) {
+    entry_t *next = entry->s_next;
     
-    entry_t *prev_entry = NULL;
-    while (entry) {
-      if (entry->map == map) {
-        if (prev_entry)
-          prev_entry->next = entry->next;
-        else
-          entry_dict[i] = entry->next;
-        
-        ZONE_FREE(entry);
-        ZONE_FREE(entry->value);
-      }
-      
-      prev_entry = entry;
-      entry = entry->next;
-    }
+    if (entry->h_next)
+      entry->h_next->h_prev = entry->h_prev;
+    if (entry->h_prev)
+      entry->h_prev->h_next = entry->h_next;
+    
+    if (entry == entry_dict[entry->id])
+      entry_dict[entry->id] = entry->h_next;
+    
+    ZONE_FREE(entry->value);
+    ZONE_FREE(entry);
+    
+    entry = next;
   }
 }
 
-int map_put(map_t map, const char *key, void *value)
+bool map_put(map_t *map, const char *key, void *value)
 {
   int id = hash_key(key) % MAX_ENTRIES;
   
   entry_t *entry = entry_dict[id];
   
   if (entry) {
-    while (entry->next) {
-      if (strcmp(entry->key, key) == 0 && entry->map == map)
-        return 0;
+    while (entry->h_next) {
+      if (strcmp(entry->key, key) == 0 && entry->map_id == map->map_id)
+        return false;
       
-      entry = entry->next;
+      entry = entry->h_next;
     }
     
-    entry->next = new_entry(map, key, value);
+    entry->h_next = new_entry(map, key, value, id);
+    entry->h_next->h_prev = entry;
+    entry = entry->h_next;
   } else {
-    entry_dict[id] = new_entry(map, key, value);
+    entry = entry_dict[id] = new_entry(map, key, value, id);
   }
   
-  return 1;
+  if (map->start) {
+    entry->s_next = map->start;
+    map->start = entry;
+  } else
+    map->start = entry;
+  
+  return true;
 }
 
-void *map_get(map_t map, const char *key)
+void *map_get(const map_t *map, const char *key)
 {
   int id = hash_key(key) % MAX_ENTRIES;
   
@@ -98,10 +104,10 @@ void *map_get(map_t map, const char *key)
   
   if (entry) {
     while (entry) {
-      if (strcmp(entry->key, key) == 0 && entry->map == map)
+      if (strcmp(entry->key, key) == 0 && entry->map_id == map->map_id)
         return entry->value;
       
-      entry = entry->next;
+      entry = entry->h_next;
     }
   }
   

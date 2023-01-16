@@ -55,13 +55,13 @@ bool expr_lvalue(const expr_t *expr)
 
 void class_new(class_t *class)
 {
-  class->map_var = map_new();
+  map_new(&class->map_var);
   class->size = 0;
 }
 
 void class_free(class_t *class)
 {
-  map_flush(class->map_var);
+  map_flush(&class->map_var);
 }
 
 var_t *class_add_var(class_t *class, const type_t *type, const char *ident)
@@ -72,38 +72,41 @@ var_t *class_add_var(class_t *class, const type_t *type, const char *ident)
   
   class->size += type_size(type);
   
-  map_put(class->map_var, ident, var);
+  map_put(&class->map_var, ident, var);
   
   return var;
 }
 
 var_t *class_find_var(const class_t *class, const char *ident)
 {
-  return map_get(class->map_var, ident);
+  return map_get(&class->map_var, ident);
 }
 
 void scope_new(scope_t *scope, const type_t *ret_type, const scope_t *scope_parent)
 {
   scope->scope_parent = scope_parent;
   
-  scope->map_var = map_new();
-  scope->map_class = map_new();
-  scope->map_fn = map_new();
+  map_new(&scope->map_var);
+  map_new(&scope->map_class);
+  map_new(&scope->map_fn);
   
   scope->ret_flag = false;
   scope->ret_type = *ret_type;
   scope->ret_value = (expr_t) {0};
   scope->size = 0;
-  
-  if (scope_parent)
-    scope->size += scope_parent->size;
 }
 
 void scope_free(scope_t *scope)
 {
-  map_flush(scope->map_var);
-  map_flush(scope->map_class);
-  map_flush(scope->map_fn);
+  entry_t *entry_class = scope->map_class.start;
+  while (entry_class) {
+    class_free((class_t*) entry_class->value);
+    entry_class = entry_class->s_next;
+  }
+  
+  map_flush(&scope->map_var);
+  map_flush(&scope->map_class);
+  map_flush(&scope->map_fn);
 }
 
 var_t *scope_add_var(scope_t *scope, const type_t *type, const char *ident)
@@ -114,14 +117,14 @@ var_t *scope_add_var(scope_t *scope, const type_t *type, const char *ident)
   
   scope->size += type_size(type);
   
-  map_put(scope->map_var, ident, var);
+  map_put(&scope->map_var, ident, var);
   
   return var;
 }
 
 var_t *scope_find_var(const scope_t *scope, const char *ident)
 {
-  var_t *var = map_get(scope->map_var, ident);
+  var_t *var = map_get(&scope->map_var, ident);
   if (!var) {
     if (!scope->scope_parent)
       return NULL;
@@ -136,14 +139,14 @@ class_t *scope_add_class(scope_t *scope, const char *ident, const class_t *class
   class_t *class = ZONE_ALLOC(sizeof(class_t));
   *class = *class_data;
   
-  map_put(scope->map_class, ident, class);
+  map_put(&scope->map_class, ident, class);
   
   return class;
 }
 
 class_t *scope_find_class(const scope_t *scope, const char *ident)
 {
-  class_t *class = map_get(scope->map_class, ident);
+  class_t *class = map_get(&scope->map_class, ident);
   if (!class) {
     if (!scope->scope_parent)
       return NULL;
@@ -161,14 +164,14 @@ fn_t *scope_add_fn(scope_t *scope, const type_t *type, s_node_t *param, s_node_t
   fn->type = *type;
   fn->scope_parent = scope;
   
-  map_put(scope->map_fn, ident, fn);
+  map_put(&scope->map_fn, ident, fn);
   
   return fn;
 }
 
 fn_t *scope_find_fn(const scope_t *scope, const char *ident)
 {
-  fn_t *fn = map_get(scope->map_fn, ident);
+  fn_t *fn = map_get(&scope->map_fn, ident);
   if (!fn) {
     if (!scope->scope_parent)
       return NULL;

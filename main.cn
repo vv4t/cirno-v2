@@ -1,6 +1,16 @@
-class_def test {
-  i32 a;
-  i32 b;
+class_def vec3 {
+  f32 x;
+  f32 y;
+  f32 z;
 };
 
-class test = new test;
+fn vec3_init(f32 x, f32 y, f32 z)
+{
+  class vec3 v = new vec3;
+  v.x = x;
+  v.y = y;
+  v.z = z;
+  return v;
+}
+
+class vec3 v = vec3_init(0.0, 0.0, 0.0);
