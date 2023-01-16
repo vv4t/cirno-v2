@@ -31,6 +31,11 @@ static void mem_assign(int loc, const type_t *type, expr_t *expr);
 static int  stack_start = 0;
 static int  stack_end = 256;
 
+typedef struct heap_block_s {
+  int   loc;
+  bool  use;
+} heap_block_t;
+
 #define MAX_HEAP_BLOCK 8
 static heap_block_t  heap_block_table[MAX_HEAP_BLOCK];
 
@@ -44,7 +49,6 @@ static scope_t      scope_global;
 bool interpret(const s_node_t *node)
 {
   scope_new(&scope_global, &type_none, NULL);
-  scope_global.size += stack_start;
   
   bool err = int_body(&scope_global, node);
   
@@ -263,17 +267,8 @@ bool int_decl(scope_t *scope, const s_node_t *node)
   if (!int_type(scope, &type, node->decl.type))
     return false;
   
-  var_t *var = scope_add_var(scope, &type, node->decl.ident->data.ident);
-  *((unsigned long long*) &mem_zone[var->loc]) = 0;
-  
-  if (scope->size >= stack_end) {
-    LOG_ERROR("ran out of memory %i/%i", scope->size, stack_end);
-    return false;
-  }
-  
+  expr_t expr;
   if (node->decl.init) {
-    expr_t expr;
-    
     if (!int_expr(scope, &expr, node->decl.init))
       return false;
     
@@ -284,9 +279,18 @@ bool int_decl(scope_t *scope, const s_node_t *node)
         &type, &expr.type);
       return false;
     }
-    
-    mem_assign(var->loc, &var->type, &expr);
+  } else {
+    expr = (expr_t) {0};
   }
+  
+  var_t *var = scope_add_var(scope, &type, node->decl.ident->data.ident);
+  
+  if (scope->size >= stack_end) {
+    LOG_ERROR("ran out of memory %i/%i", scope->size, stack_end);
+    return false;
+  }
+  
+  mem_assign(var->loc, &var->type, &expr);
   
   return true;
 }
@@ -572,8 +576,10 @@ bool int_direct(scope_t *scope, expr_t *expr, const s_node_t *node)
     return false;
   }
   
+  heap_block_t *heap_block = (heap_block_t*) base.align_of;
+  
   expr->type = var->type;
-  expr->loc = base.heap_block->loc + var->loc;
+  expr->loc = heap_block->loc + var->loc;
   mem_load(expr->loc, &expr->type, expr);
   
   return true;
@@ -624,7 +630,7 @@ bool int_new(scope_t *scope, expr_t *expr, const s_node_t *node)
   expr->type.spec = SPEC_CLASS;
   expr->type.size = 0;
   expr->type.class = class;
-  expr->heap_block = heap_alloc(class->size);
+  expr->align_of = (size_t) heap_alloc(class->size);
   expr->loc = -1;
   
   return true;
@@ -668,7 +674,7 @@ static void mem_load(int loc, const type_t *type, expr_t *expr)
   expr->type = *type;
   
   if (type_class(type))
-    expr->heap_block = (heap_block_t*) *((unsigned long long*) &mem_zone[loc]);
+    expr->align_of = *((size_t*) &mem_zone[loc]);
   else if (type_cmp(type, &type_i32))
     expr->i32 = *((int*) &mem_zone[loc]);
   else if (type_cmp(type, &type_f32))
@@ -678,11 +684,13 @@ static void mem_load(int loc, const type_t *type, expr_t *expr)
 static void mem_assign(int loc, const type_t *type, expr_t *expr)
 {
   if (type_class(type))
-    *((unsigned long long*) &mem_zone[loc]) = (unsigned long long) expr->heap_block;
+    *((unsigned long long*) &mem_zone[loc]) = (size_t) expr->align_of;
   else if (type_cmp(type, &type_i32))
     *((int*) &mem_zone[loc]) = expr->i32;
   else if (type_cmp(type, &type_f32))
     *((float*) &mem_zone[loc]) = expr->f32;
+  else if (type_cmp(type, &type_none))
+    *((size_t*) &mem_zone[loc]) = 0;
 }
 
 static heap_block_t *heap_alloc(int size)
@@ -732,8 +740,11 @@ static void heap_clean_R(scope_t *scope)
     if (type_class(&var->type)) {
       expr_t expr;
       mem_load(var->loc, &var->type, &expr);
-      if (expr.heap_block)
-        expr.heap_block->use = true;
+      
+      heap_block_t *heap_block = (heap_block_t*) expr.align_of;
+      
+      if (heap_block)
+        heap_block->use = true;
     }
     
     entry = entry->s_next;

@@ -4,14 +4,10 @@
 #include "map.h"
 #include "syntax.h"
 #include <stdbool.h>
+#include <stddef.h>
 
 typedef struct class_s class_t;
 typedef struct scope_s scope_t;
-
-typedef struct {
-  int   loc;
-  bool  use;
-} heap_block_t;
 
 typedef enum {
   SPEC_NONE,
@@ -28,9 +24,9 @@ typedef struct {
 
 typedef struct {
   union {
-    int           i32;
-    float         f32;
-    heap_block_t  *heap_block;
+    int     i32;
+    float   f32;
+    size_t  align_of;
   };
   int     loc;
   type_t  type;
