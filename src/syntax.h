@@ -2,6 +2,7 @@
 #define SYNTAX_H
 
 #include "lex.h"
+#include <stdbool.h>
 
 typedef enum {
   S_CONSTANT,
@@ -115,5 +116,6 @@ typedef struct s_node_s {
 extern s_node_t *s_parse(lex_t *lex);
 extern void s_free(s_node_t *node);
 extern void s_print_node(const s_node_t *node);
+extern bool s_error();
 
 #endif

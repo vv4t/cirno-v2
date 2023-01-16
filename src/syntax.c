@@ -4,7 +4,6 @@
 #include "zone.h"
 #include <stddef.h>
 #include <stdio.h>
-#include <stdbool.h>
 
 static bool s_err = false;
 
@@ -94,10 +93,12 @@ s_node_t *s_parse(lex_t *lex)
     stmt_body = s_stmt(lex);
   }
   
-  if (s_err)
-    return NULL;
-  
   return body;
+}
+
+bool s_error()
+{
+  return s_err;
 }
 
 static s_node_t *s_body(lex_t *lex)

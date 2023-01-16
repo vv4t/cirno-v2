@@ -40,7 +40,7 @@ int type_size_base(const type_t *type)
   case SPEC_F32:
     return 4;
   case SPEC_CLASS:
-    return 4;
+    return 8;
   }
 }
 

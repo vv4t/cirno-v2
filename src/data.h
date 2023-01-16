@@ -10,7 +10,7 @@ typedef struct scope_s scope_t;
 
 typedef struct {
   int loc;
-} heap_data_t;
+} heap_block_t;
 
 typedef enum {
   SPEC_NONE,
@@ -27,9 +27,9 @@ typedef struct {
 
 typedef struct {
   union {
-    int   i32;
-    float f32;
-    int   heap_id;
+    int           i32;
+    float         f32;
+    heap_block_t  *heap_block;
   };
   int     loc;
   type_t  type;
