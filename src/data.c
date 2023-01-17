@@ -90,8 +90,13 @@ var_t *class_find_var(const class_t *class, const char *ident)
   return map_get(&class->map_var, ident);
 }
 
-void scope_new(scope_t *scope, const type_t *ret_type, const scope_t *scope_parent)
+void scope_new(scope_t *scope, const type_t *ret_type, scope_t *scope_parent, const scope_t *find_parent)
 {
+  scope->find_parent = find_parent;
+  
+  if (scope_parent)
+    scope_parent->scope_child = scope;
+  
   scope->scope_parent = scope_parent;
   scope->scope_child  = NULL;
   
@@ -107,6 +112,9 @@ void scope_new(scope_t *scope, const type_t *ret_type, const scope_t *scope_pare
 
 void scope_free(scope_t *scope)
 {
+  if (scope->scope_parent)
+    scope->scope_parent->scope_child = NULL;
+  
   map_flush(&scope->map_class, _class_free);
   map_flush(&scope->map_var, _zone_free);
   map_flush(&scope->map_fn, _zone_free);
@@ -129,9 +137,9 @@ var_t *scope_find_var(const scope_t *scope, const char *ident)
 {
   var_t *var = map_get(&scope->map_var, ident);
   if (!var) {
-    if (!scope->scope_parent)
+    if (!scope->find_parent)
       return NULL;
-    return scope_find_var(scope->scope_parent, ident);
+    return scope_find_var(scope->find_parent, ident);
   }
   
   return var;
@@ -151,9 +159,9 @@ class_t *scope_find_class(const scope_t *scope, const char *ident)
 {
   class_t *class = map_get(&scope->map_class, ident);
   if (!class) {
-    if (!scope->scope_parent)
+    if (!scope->find_parent)
       return NULL;
-    return scope_find_class(scope->scope_parent, ident);
+    return scope_find_class(scope->find_parent, ident);
   }
   
   return class;
@@ -178,7 +186,7 @@ fn_t *scope_find_fn(const scope_t *scope, const char *ident)
   if (!fn) {
     if (!scope->scope_parent)
       return NULL;
-    return scope_find_fn(scope->scope_parent, ident);
+    return scope_find_fn(scope->find_parent, ident);
   }
   
   return fn;

@@ -34,8 +34,10 @@ typedef struct {
 } expr_t;
 
 struct scope_s {
-  const scope_t *scope_parent;
-  scope_t       *scope_child;
+  const scope_t *find_parent;
+  
+  scope_t *scope_parent;
+  scope_t *scope_child;
   
   map_t   map_fn;
   map_t   map_var;
@@ -84,7 +86,7 @@ extern void     class_free(class_t *class);
 extern var_t    *class_add_var(class_t *class, const type_t *type, const char *ident);
 extern var_t    *class_find_var(const class_t *class, const char *ident);
 
-extern void     scope_new(scope_t *scope, const type_t *ret_type, const scope_t *scope_parent);
+extern void     scope_new(scope_t *scope, const type_t *ret_type, scope_t *scope_parent, const scope_t *find_parent);
 extern void     scope_free(scope_t *scope);
 
 extern var_t    *scope_add_var(scope_t *scope, const type_t *type, const char *ident);

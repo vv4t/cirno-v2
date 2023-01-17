@@ -47,7 +47,7 @@ static scope_t      scope_global;
 
 bool interpret(const s_node_t *node)
 {
-  scope_new(&scope_global, &type_none, NULL);
+  scope_new(&scope_global, &type_none, NULL, NULL);
   
   bool err = int_body(&scope_global, node);
   
@@ -60,10 +60,8 @@ bool interpret(const s_node_t *node)
 bool int_body(scope_t *scope, const s_node_t *node)
 {
   scope_t new_scope;
-  scope_new(&new_scope, &scope->ret_type, scope);
+  scope_new(&new_scope, &scope->ret_type, scope, scope);
   new_scope.size = scope->size;
-  
-  scope->scope_child = &new_scope;
   
   const s_node_t *head = node;
   while (head && !new_scope.ret_flag) {
@@ -386,11 +384,9 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
   }
   
   scope_t new_scope;
-  scope_new(&new_scope, &fn->type, fn->scope_parent);
+  scope_new(&new_scope, &fn->type, scope, fn->scope_parent);
   new_scope.ret_type = fn->type;
   new_scope.size += scope->size;
-  
-  scope->scope_child = &new_scope;
   
   s_node_t *arg = node->proc.arg;
   s_node_t *head = fn->param;
@@ -645,8 +641,6 @@ bool int_new(scope_t *scope, expr_t *expr, const s_node_t *node)
       node->new.class_ident->data.ident);
     return false;
   }
-  
-  heap_clean();
   
   expr->type.spec = SPEC_CLASS;
   expr->type.size = 0;
