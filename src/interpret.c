@@ -1,6 +1,7 @@
 #include "interpret.h"
 
 #include "log.h"
+#include "zone.h"
 
 static bool int_fn(scope_t *scope, const s_node_t *node);
 static bool int_body(scope_t *scope, const s_node_t *node);
@@ -23,24 +24,22 @@ static bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node);
 static bool int_constant(scope_t *scope, expr_t *expr, const s_node_t *node);
 static bool int_new(scope_t *scope, expr_t *expr, const s_node_t *node);
 
-static char mem_zone[512];
-
-static void mem_load(int loc, const type_t *type, expr_t *expr);
-static void mem_assign(int loc, const type_t *type, expr_t *expr);
-
-static int  stack_start = 0;
-static int  stack_end = 256;
+static char mem_stack[512];
+static void mem_load(char *loc_base, int loc_offset, const type_t *type, expr_t *expr);
+static void mem_assign(char *loc_base, int loc_offset, const type_t *type, expr_t *expr);
+static int  mem_stack_end = 256;
 
 typedef struct heap_block_s {
-  int   loc;
+  char  *block;
   bool  use;
+  
+  struct heap_block_s *next;
+  struct heap_block_s *prev;
 } heap_block_t;
 
-#define MAX_HEAP_BLOCK 8
-static heap_block_t  heap_block_table[MAX_HEAP_BLOCK];
+static heap_block_t  *heap_block_list = NULL;
 
 static heap_block_t  *heap_alloc(int size);
-static int          heap_ptr = 256;
 static void         heap_clean();
 static void         heap_clean_R(scope_t *scope);
 
@@ -71,6 +70,7 @@ bool int_body(scope_t *scope, const s_node_t *node)
     if (!int_stmt(&new_scope, head)) {
       scope_free(&new_scope);
       scope->scope_child = NULL;
+      heap_clean();
       return false;
     }
     
@@ -79,6 +79,8 @@ bool int_body(scope_t *scope, const s_node_t *node)
   
   scope->ret_flag = new_scope.ret_flag;
   scope->ret_value = new_scope.ret_value;
+  
+  heap_clean();
   
   scope_free(&new_scope);
   scope->scope_child = NULL;
@@ -213,11 +215,20 @@ bool int_ret_stmt(scope_t *scope, const s_node_t *node)
 
 bool int_print(scope_t *scope, const s_node_t *node)
 {
-  expr_t expr;
-  if (!int_expr(scope, &expr, node->print.body))
-    return false;
+  s_node_t *arg = node->print.arg;
   
-  c_debug("out: %w", &expr);
+  c_debug("out: ");
+  
+  while (arg) {
+    expr_t expr;
+    if (!int_expr(scope, &expr, arg->arg.body))
+      return false;
+    
+    c_debug("%w ", &expr);
+    arg = arg->arg.next;
+  }
+  
+  c_debug("\n");
   
   return true;
 }
@@ -285,12 +296,12 @@ bool int_decl(scope_t *scope, const s_node_t *node)
   
   var_t *var = scope_add_var(scope, &type, node->decl.ident->data.ident);
   
-  if (scope->size >= stack_end) {
-    LOG_ERROR("ran out of memory %i/%i", scope->size, stack_end);
+  if (scope->size >= mem_stack_end) {
+    LOG_ERROR("ran out of memory %i/%i", scope->size, mem_stack_end);
     return false;
   }
   
-  mem_assign(var->loc, &var->type, &expr);
+  mem_assign(mem_stack, var->loc, &var->type, &expr);
   
   return true;
 }
@@ -418,7 +429,7 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
     }
     
     var_t *var = scope_add_var(&new_scope, &type, head->param_decl.ident->data.ident);
-    mem_assign(var->loc, &var->type, &arg_value);
+    mem_assign(mem_stack, var->loc, &var->type, &arg_value);
     
     head = head->param_decl.next;
     arg = arg->arg.next;
@@ -466,7 +477,8 @@ bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node)
   if (!int_expr(scope, &rhs, node->binop.rhs))
     return false;
   
-  expr->loc = -1;
+  expr->loc_base = NULL;
+  expr->loc_offset = 0;
   if (type_cmp(&lhs.type, &type_i32) && type_cmp(&rhs.type, &type_i32)) {
     expr->type = type_i32;
     switch (node->binop.op->token) {
@@ -494,7 +506,7 @@ bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node)
         return false;
       }
       
-      mem_assign(lhs.loc, &type_i32, &rhs);
+      mem_assign(lhs.loc_base, lhs.loc_offset, &type_i32, &rhs);
       *expr = lhs;
       expr->i32 = rhs.i32;
       
@@ -531,7 +543,7 @@ bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node)
         return false;
       }
       
-      mem_assign(lhs.loc, &type_f32, &rhs);
+      mem_assign(lhs.loc_base, lhs.loc_offset, &type_f32, &rhs);
       *expr = lhs;
       expr->f32 = rhs.f32;
       
@@ -566,6 +578,14 @@ bool int_direct(scope_t *scope, expr_t *expr, const s_node_t *node)
     return false;
   }
   
+  if (!base.align_of) {
+    c_error(
+      node->direct.child_ident,
+      "request for member '%s' in uninitialised class",
+      node->direct.child_ident->data.ident);
+    return false;
+  }
+  
   var_t *var = class_find_var(base.type.class, node->direct.child_ident->data.ident);
   if (!var) {
     c_error(
@@ -579,8 +599,9 @@ bool int_direct(scope_t *scope, expr_t *expr, const s_node_t *node)
   heap_block_t *heap_block = (heap_block_t*) base.align_of;
   
   expr->type = var->type;
-  expr->loc = heap_block->loc + var->loc;
-  mem_load(expr->loc, &expr->type, expr);
+  expr->loc_base = heap_block->block;
+  expr->loc_offset = var->loc;
+  mem_load(expr->loc_base, expr->loc_offset, &expr->type, expr);
   
   return true;
 }
@@ -607,8 +628,8 @@ bool int_index(scope_t *scope, expr_t *expr, const s_node_t *node)
   
   *expr = base;
   expr->type.size = 0;
-  expr->loc += index.i32 * type_size_base(&base.type);
-  mem_load(expr->loc, &expr->type, expr);
+  expr->loc_offset += index.i32 * type_size_base(&base.type);
+  mem_load(expr->loc_base, expr->loc_offset, &expr->type, expr);
   
   return true;
 }
@@ -631,7 +652,8 @@ bool int_new(scope_t *scope, expr_t *expr, const s_node_t *node)
   expr->type.size = 0;
   expr->type.class = class;
   expr->align_of = (size_t) heap_alloc(class->size);
-  expr->loc = -1;
+  expr->loc_base = NULL;
+  expr->loc_offset = 0;
   
   return true;
 }
@@ -643,12 +665,14 @@ bool int_constant(scope_t *scope, expr_t *expr, const s_node_t *node)
   case TK_CONST_INTEGER:
     expr->type = type_i32;
     expr->i32 = node->constant.lexeme->data.i32;
-    expr->loc = -1;
+    expr->loc_base = NULL;
+    expr->loc_offset = 0;
     break;
   case TK_CONST_FLOAT:
     expr->type = type_f32;
     expr->f32 = node->constant.lexeme->data.f32;
-    expr->loc = -1;
+    expr->loc_base = NULL;
+    expr->loc_offset = 0;
     break;
   case TK_IDENTIFIER:
     var = scope_find_var(scope, node->constant.lexeme->data.ident);
@@ -661,70 +685,85 @@ bool int_constant(scope_t *scope, expr_t *expr, const s_node_t *node)
       return false;
     }
     
-    mem_load(var->loc, &var->type, expr);
+    mem_load(mem_stack, var->loc, &var->type, expr);
     break;
   }
   
   return true;
 }
 
-static void mem_load(int loc, const type_t *type, expr_t *expr)
+static void mem_load(char *loc_base, int loc_offset, const type_t *type, expr_t *expr)
 {
-  expr->loc = loc;
+  expr->loc_base = loc_base;
+  expr->loc_offset = loc_offset;
   expr->type = *type;
   
   if (type_class(type))
-    expr->align_of = *((size_t*) &mem_zone[loc]);
+    expr->align_of = *((size_t*) &loc_base[loc_offset]);
   else if (type_cmp(type, &type_i32))
-    expr->i32 = *((int*) &mem_zone[loc]);
+    expr->i32 = *((int*) &loc_base[loc_offset]);
   else if (type_cmp(type, &type_f32))
-    expr->f32 = *((float*) &mem_zone[loc]);
+    expr->f32 = *((float*) &loc_base[loc_offset]);
 }
 
-static void mem_assign(int loc, const type_t *type, expr_t *expr)
+static void mem_assign(char *loc_base, int loc_offset, const type_t *type, expr_t *expr)
 {
   if (type_class(type))
-    *((unsigned long long*) &mem_zone[loc]) = (size_t) expr->align_of;
+    *((unsigned long long*) &loc_base[loc_offset]) = (size_t) expr->align_of;
   else if (type_cmp(type, &type_i32))
-    *((int*) &mem_zone[loc]) = expr->i32;
+    *((int*) &loc_base[loc_offset]) = expr->i32;
   else if (type_cmp(type, &type_f32))
-    *((float*) &mem_zone[loc]) = expr->f32;
+    *((float*) &loc_base[loc_offset]) = expr->f32;
   else if (type_cmp(type, &type_none))
-    *((size_t*) &mem_zone[loc]) = 0;
+    *((size_t*) &loc_base[loc_offset]) = 0;
 }
 
 static heap_block_t *heap_alloc(int size)
 {
-  heap_block_t *heap_block = NULL;
-  for (int i = 0; i < MAX_HEAP_BLOCK; i++) {
-    if (!heap_block_table[i].use)
-      heap_block = &heap_block_table[i];
-  }
-  
-  if (!heap_block) {
-    LOG_ERROR("ran out of memory");
-    return NULL;
-  }
-  
-  heap_block->loc = heap_ptr;
+  heap_block_t *heap_block = ZONE_ALLOC(sizeof(heap_block_t));
+  heap_block->block = ZONE_ALLOC(size);
   heap_block->use = false;
   
-  heap_ptr += size;
+  if (heap_block_list) {
+    heap_block->next = heap_block_list;
+    heap_block->prev = NULL;
+    heap_block_list->prev = heap_block;
+    heap_block_list = heap_block;
+  } else {
+    heap_block_list = heap_block;
+    heap_block_list->prev = NULL;
+    heap_block_list->next = NULL;
+  }
   
   return heap_block;
 }
 
 static void heap_clean()
 {
-  for (int i = 0; i < MAX_HEAP_BLOCK; i++)
-    heap_block_table[i].use = false;
+  heap_block_t *heap_block = heap_block_list;
+  while (heap_block) {
+    heap_block->use = false;
+    heap_block = heap_block->next;
+  }
   
   heap_clean_R(&scope_global);
   
-  for (int i = 0; i < MAX_HEAP_BLOCK; i++) {
-    if (!heap_block_table[i].use && heap_block_table[i].loc) {
-      LOG_DEBUG("%i", heap_block_table[i].loc);
+  heap_block = heap_block_list;
+  while (heap_block) {
+    if (!heap_block->use) {
+      if (heap_block->next)
+        heap_block->next->prev = heap_block->prev;
+      if (heap_block->prev)
+        heap_block->prev->next = heap_block->next;
+      
+      if (heap_block == heap_block_list)
+        heap_block_list = heap_block->next;
+      
+      ZONE_FREE(heap_block->block);
+      ZONE_FREE(heap_block);
     }
+    
+    heap_block = heap_block->next;
   }
 }
 
@@ -739,7 +778,7 @@ static void heap_clean_R(scope_t *scope)
     
     if (type_class(&var->type)) {
       expr_t expr;
-      mem_load(var->loc, &var->type, &expr);
+      mem_load(mem_stack, var->loc, &var->type, &expr);
       
       heap_block_t *heap_block = (heap_block_t*) expr.align_of;
       

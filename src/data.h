@@ -28,7 +28,8 @@ typedef struct {
     float   f32;
     size_t  align_of;
   };
-  int     loc;
+  int     loc_offset;
+  char    *loc_base;
   type_t  type;
 } expr_t;
 

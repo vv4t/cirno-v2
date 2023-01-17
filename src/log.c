@@ -29,8 +29,6 @@ void c_debug(const char *fmt, ...)
   va_start(args, fmt);
   c_printf(fmt, args);
   va_end(args);
-  
-  putc('\n', stdout);
 }
 
 static void c_printf(const char *fmt, va_list args)
@@ -64,6 +62,12 @@ static void c_printf(const char *fmt, va_list args)
 
 static void expr_print(const expr_t *expr)
 {
+  if (type_array(&expr->type)) {
+    type_print(&expr->type);
+    printf(" (%p)", &expr->loc_base[expr->loc_offset]);
+    return;
+  }
+  
   switch (expr->type.spec) {
   case SPEC_NONE:
     printf("(none)");
@@ -73,6 +77,10 @@ static void expr_print(const expr_t *expr)
     break;
   case SPEC_F32:
     printf("%f", expr->f32);
+    break;
+  case SPEC_CLASS:
+    type_print(&expr->type);
+    printf(" (%p)", expr->align_of);
     break;
   }
 }

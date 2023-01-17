@@ -73,7 +73,7 @@ typedef struct s_node_s {
       const lexeme_t  *left_bracket;
     } index;
     struct {
-      struct s_node_s *body;
+      struct s_node_s *arg;
     } print;
     struct {
       struct s_node_s *cond;

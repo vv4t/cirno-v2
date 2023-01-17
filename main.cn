@@ -6,7 +6,6 @@ class_def vec3 {
 
 fn vec3_init(f32 x, f32 y, f32 z) : class vec3
 {
-  class vec3 e = new vec3;
   class vec3 v = new vec3;
   v.x = x;
   v.y = y;
@@ -14,13 +13,22 @@ fn vec3_init(f32 x, f32 y, f32 z) : class vec3
   return v;
 }
 
+fn vec3_add(class vec3 a, class vec3 b) : class vec3
+{
+  class vec3 c = new vec3;
+  c.x = a.x + b.x;
+  c.y = a.y + b.y;
+  c.z = a.z + b.z;
+  return c;
+}
+
 fn main()
 {
-  i32 i = 0;
-  while (i < 5) {
-    class vec3 v = vec3_init(0.0, 0.0, 0.0);
-    i = i + 1;
-  }
+  class vec3 a = vec3_init(1.0, 2.0, 3.0);
+  class vec3 b = vec3_init(1.0, 2.0, 3.0);
+  class vec3 c = vec3_add(a, b);
+  
+  print c.x, c.y, c.z;
 }
 
 main();

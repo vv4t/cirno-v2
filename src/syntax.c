@@ -49,6 +49,7 @@ typedef enum {
   R_STMT,
   R_TYPE,
   R_UNARY,
+  R_ARG,
   R_EXPR
 } rule_t;
 
@@ -250,7 +251,7 @@ static s_node_t *s_print(lex_t *lex)
   if (!lex_match(lex, TK_PRINT))
     return NULL;
   
-  s_node_t *body = s_expect_rule(lex, R_EXPR);
+  s_node_t *body = s_expect_rule(lex, R_ARG);
   s_expect(lex, ';');
   
   return make_print(body);
@@ -418,15 +419,17 @@ static s_node_t *s_expect_rule(lex_t *lex, rule_t rule)
     s_stmt,   // R_STMT
     s_type,   // R_TYPE
     s_unary,  // R_STMT
+    s_arg,    // R_ARG
     s_expr    // R_EXPR
   };
   
   static const char *str_rule_table[] = {
-    "body-statement", // R_BODY
-    "statement",      // R_STMT
-    "type",           // R_TYPE
-    "unary",          // R_UNARY
-    "expression"      // R_EXPR
+    "body-statement",             // R_BODY
+    "statement",                  // R_STMT
+    "type",                       // R_TYPE
+    "unary",                      // R_UNARY
+    "argument-expression-list",   // R_UNARY
+    "expression"                  // R_EXPR
   };
   
   s_node_t *node = s_rule_table[rule](lex);
@@ -493,10 +496,10 @@ static s_node_t *make_ret_stmt(const lexeme_t *ret_token, s_node_t *body)
   return node;
 }
 
-static s_node_t *make_print(s_node_t *body)
+static s_node_t *make_print(s_node_t *arg)
 {
   s_node_t *node = make_node(S_PRINT);
-  node->print.body = body;
+  node->print.arg = arg;
   return node;
 }
 
@@ -676,7 +679,7 @@ static void s_print_node_R(const s_node_t *node, int pad)
     break;
   case S_PRINT:
     LOG_DEBUG("%*sS_PRINT", pad, "");
-    s_print_node_R(node->print.body, pad + 2);
+    s_print_node_R(node->print.arg, pad + 2);
     break;
   case S_DIRECT:
     s_print_node_R(node->direct.base, pad + 2);
@@ -765,7 +768,7 @@ void s_free(s_node_t *node)
     s_free(node->while_stmt.body);
     break;
   case S_PRINT:
-    s_free(node->print.body);
+    s_free(node->print.arg);
     break;
   case S_DIRECT:
     s_free(node->direct.base);

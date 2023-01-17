@@ -51,7 +51,7 @@ int type_size_base(const type_t *type)
 
 bool expr_lvalue(const expr_t *expr)
 {
-  return expr->loc != -1;
+  return expr->loc_base != NULL;
 }
 
 void class_new(class_t *class, const char *ident)
