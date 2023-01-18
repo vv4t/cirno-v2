@@ -52,7 +52,6 @@ void zone_free(const char *src, int line, void *block)
     zone_block_list = zone_block->next;
   
   num_zone_block--;
-  
   free(zone_block);
 }
 

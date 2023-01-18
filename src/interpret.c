@@ -3,7 +3,27 @@
 #include "log.h"
 #include "zone.h"
 
-static bool int_fn(scope_t *scope, const s_node_t *node);
+typedef struct heap_block_s {
+  char  *block;
+  bool  use;
+  
+  struct heap_block_s *next;
+  struct heap_block_s *prev;
+} heap_block_t;
+
+static heap_block_t  *heap_block_list = NULL;
+static heap_block_t  *heap_alloc(int size);
+static void         heap_clean();
+static void         heap_clean_R(scope_t *scope);
+
+static scope_t  scope_global;
+
+static char mem_stack[512];
+static void mem_load(char *loc_base, int loc_offset, const type_t *type, expr_t *expr);
+static void mem_assign(char *loc_base, int loc_offset, const type_t *type, expr_t *expr);
+static int  mem_stack_end = 256;
+
+static bool int_fn(scope_t *scope, const s_node_t *node, const scope_t *scope_class);
 static bool int_body(scope_t *scope, const s_node_t *node);
 static bool int_stmt(scope_t *scope, const s_node_t *node);
 static bool int_print(scope_t *scope, const s_node_t *node);
@@ -24,28 +44,7 @@ static bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node);
 static bool int_constant(scope_t *scope, expr_t *expr, const s_node_t *node);
 static bool int_new(scope_t *scope, expr_t *expr, const s_node_t *node);
 
-static bool int_load_ident(const scope_t *scope, char *loc_base, expr_t *expr, const lexeme_t *lexeme);
-
-static char mem_stack[512];
-static void mem_load(char *loc_base, int loc_offset, const type_t *type, expr_t *expr);
-static void mem_assign(char *loc_base, int loc_offset, const type_t *type, expr_t *expr);
-static int  mem_stack_end = 256;
-
-typedef struct heap_block_s {
-  char  *block;
-  bool  use;
-  
-  struct heap_block_s *next;
-  struct heap_block_s *prev;
-} heap_block_t;
-
-static heap_block_t  *heap_block_list = NULL;
-
-static heap_block_t  *heap_alloc(int size);
-static void         heap_clean();
-static void         heap_clean_R(scope_t *scope);
-
-static scope_t      scope_global;
+static bool int_load_ident(const scope_t *scope, heap_block_t *heap_block, expr_t *expr, const lexeme_t *lexeme);
 
 bool interpret(const s_node_t *node)
 {
@@ -123,7 +122,7 @@ bool int_stmt(scope_t *scope, const s_node_t *node)
       return false;
     break;
   case S_FN:
-    if (!int_fn(scope, node->stmt.body))
+    if (!int_fn(scope, node->stmt.body, NULL))
       return false;
     break;
   case S_RET_STMT:
@@ -138,7 +137,7 @@ bool int_stmt(scope_t *scope, const s_node_t *node)
   return true;
 }
 
-bool int_fn(scope_t *scope, const s_node_t *node)
+bool int_fn(scope_t *scope, const s_node_t *node, const scope_t *scope_class)
 {
   if (scope_find_fn(scope, node->fn.fn_ident->data.ident)) {
     c_error(node->fn.fn_ident, "redefinition of function '%s'", node->fn.fn_ident->data.ident);
@@ -156,6 +155,7 @@ bool int_fn(scope_t *scope, const s_node_t *node)
     &type,
     node->fn.param_decl,
     node->fn.body,
+    scope_class,
     node->fn.fn_ident->data.ident);
   
   return true;
@@ -241,19 +241,27 @@ bool int_class_def(scope_t *scope, const s_node_t *node)
   }
   
   scope_t class;
-  scope_new(&class, node->class_def.ident->data.ident, &type_none, NULL, NULL);
+  scope_new(&class, node->class_def.ident->data.ident, &type_none, NULL, scope);
+  scope_t *class_scope = scope_add_class(scope, node->class_def.ident->data.ident, &class);
   
   s_node_t *head = node->class_def.class_decl;
   while (head) {
-    if (!int_stmt(&class, head)) {
-      scope_free(&class);
-      return false;
+    switch (head->stmt.body->node_type) {
+    case S_FN:
+      if (!int_fn(class_scope, head->stmt.body, class_scope))
+        return false;
+      break;
+    case S_DECL:
+      if (!int_decl(class_scope, head->stmt.body))
+        return false;
+      break;
+    default:
+      LOG_ERROR("unknown node_type (%i)", head->stmt.body->node_type);
+      break;
     }
     
     head = head->stmt.next;
   }
-  
-  scope_add_class(scope, node->class_def.ident->data.ident, &class);
   
   return true;
 }
@@ -390,6 +398,19 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
   scope_new(&new_scope, NULL, &fn->type, scope, fn->scope_parent);
   new_scope.ret_type = fn->type;
   new_scope.size += scope->size;
+  
+  if (fn->scope_class) {
+    expr_t self_expr;
+    self_expr.type.spec = SPEC_CLASS;
+    self_expr.type.size = 0;
+    self_expr.type.class = fn->scope_class;
+    self_expr.align_of = (size_t) base.loc_base;
+    self_expr.loc_base = NULL;
+    self_expr.loc_offset = 0;
+    
+    var_t *var = scope_add_var(&new_scope, &self_expr.type, "this");
+    mem_assign(mem_stack, var->loc, &var->type, &self_expr);
+  }
   
   s_node_t *arg = node->proc.arg;
   s_node_t *head = fn->param;
@@ -584,8 +605,7 @@ bool int_direct(scope_t *scope, expr_t *expr, const s_node_t *node)
   }
   
   heap_block_t *heap_block = (heap_block_t*) base.align_of;
-  
-  if (!int_load_ident(base.type.class, heap_block->block, expr, node->direct.child_ident)) {
+  if (!int_load_ident(base.type.class, heap_block, expr, node->direct.child_ident)) {
     c_error(
       node->direct.child_ident,
       "'class %s' has no member named '%s'",
@@ -664,7 +684,7 @@ bool int_constant(scope_t *scope, expr_t *expr, const s_node_t *node)
     expr->loc_offset = 0;
     break;
   case TK_IDENTIFIER:
-    if (!int_load_ident(scope, mem_stack, expr, node->constant.lexeme)) {
+    if (!int_load_ident(scope, NULL, expr, node->constant.lexeme)) {
       c_error(
         node->constant.lexeme,
         "'%s' undeclared",
@@ -677,11 +697,14 @@ bool int_constant(scope_t *scope, expr_t *expr, const s_node_t *node)
   return true;
 }
 
-static bool int_load_ident(const scope_t *scope, char *loc_base, expr_t *expr, const lexeme_t *lexeme)
+static bool int_load_ident(const scope_t *scope, heap_block_t *heap_block, expr_t *expr, const lexeme_t *lexeme)
 {
   var_t *var = scope_find_var(scope, lexeme->data.ident);
   if (var) {
-    mem_load(loc_base, var->loc, &var->type, expr);
+    if (heap_block)
+      mem_load(heap_block->block, var->loc, &var->type, expr);
+    else
+      mem_load(mem_stack, var->loc, &var->type, expr);
     return true;
   }
   
@@ -691,8 +714,13 @@ static bool int_load_ident(const scope_t *scope, char *loc_base, expr_t *expr, c
     expr->type.size = 0;
     expr->type.class = NULL;
     expr->align_of = (size_t) fn;
-    expr->loc_base = loc_base;
     expr->loc_offset = 0;
+    
+    if (heap_block)
+      expr->loc_base = (char*) heap_block;
+    else
+      expr->loc_base = NULL;
+    
     return true;
   }
   

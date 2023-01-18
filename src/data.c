@@ -12,6 +12,11 @@ static void _zone_free(void *block)
   ZONE_FREE(block);
 }
 
+static void _zone_free_2(void *block)
+{
+  ZONE_FREE(block);
+}
+
 bool type_cmp(const type_t *a, const type_t *b)
 {
   return a->spec == b->spec
@@ -78,12 +83,12 @@ var_t *class_find_var(const scope_t *class, const char *ident)
   return map_get(&class->map_var, ident);
 }
 
-void scope_new(scope_t *scope, const char *ident,const type_t *ret_type, scope_t *scope_parent, const scope_t *scope_find)
+void scope_new(scope_t *scope, const char *ident, const type_t *ret_type, scope_t *scope_parent, const scope_t *scope_find)
 {
   if (scope_parent)
     scope_parent->scope_child = scope;
   
-  scope->ident = NULL;
+  scope->ident = ident;
   scope->scope_find = scope_find;
   scope->scope_parent = scope_parent;
   scope->scope_child  = NULL;
@@ -104,7 +109,7 @@ void scope_free(scope_t *scope)
     scope->scope_parent->scope_child = NULL;
   
   map_flush(&scope->map_class, _class_free);
-  map_flush(&scope->map_var, _zone_free);
+  map_flush(&scope->map_var, _zone_free_2);
   map_flush(&scope->map_fn, _zone_free);
 }
 
@@ -155,13 +160,14 @@ scope_t *scope_find_class(const scope_t *scope, const char *ident)
   return class;
 }
 
-fn_t *scope_add_fn(scope_t *scope, const type_t *type, s_node_t *param, s_node_t *node, const char *ident)
+fn_t *scope_add_fn(scope_t *scope, const type_t *type, s_node_t *param, s_node_t *node, const scope_t *scope_class, const char *ident)
 {
   fn_t *fn = ZONE_ALLOC(sizeof(fn_t));
   fn->node = node;
   fn->param = param;
   fn->type = *type;
   fn->scope_parent = scope;
+  fn->scope_class = scope_class;
   
   map_put(&scope->map_fn, ident, fn);
   

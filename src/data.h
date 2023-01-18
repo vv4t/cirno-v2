@@ -17,9 +17,9 @@ typedef enum {
 } spec_t;
 
 typedef struct {
-  spec_t  spec;
-  scope_t *class;
-  int     size;
+  spec_t        spec;
+  int           size;
+  const scope_t *class;
 } type_t;
 
 typedef struct {
@@ -62,6 +62,7 @@ typedef struct {
   s_node_t      *param;
   type_t        type;
   const scope_t *scope_parent;
+  const scope_t *scope_class;
 } fn_t;
 
 extern type_t type_none;
@@ -83,7 +84,7 @@ extern var_t    *scope_add_var(scope_t *scope, const type_t *type, const char *i
 extern var_t    *scope_find_var(const scope_t *scope, const char *ident);
 extern scope_t  *scope_add_class(scope_t *scope, const char *ident, const scope_t *class_data);
 extern scope_t  *scope_find_class(const scope_t *scope, const char *ident);
-extern fn_t     *scope_add_fn(scope_t *scope, const type_t *type, s_node_t *param, s_node_t *node, const char *ident);
+extern fn_t     *scope_add_fn(scope_t *scope, const type_t *type, s_node_t *param, s_node_t *node, const scope_t *scope_class, const char *ident);
 extern fn_t     *scope_find_fn(const scope_t *scope, const char *ident);
 
 #endif

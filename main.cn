@@ -1,17 +1,25 @@
-i32 a = 4;
 
 class_def vec3 {
   f32 x;
   
-  fn main()
+  fn test()
   {
-    print a;
+    this.run();
+  }
+  
+  fn run()
+  {
+    print 1;
   }
 };
 
+i32 a = 4;
+
 fn main()
 {
-  print a;
+  class vec3 test = new vec3;
+  test.x = 4.0;
+  test.test();
 }
 
 main();
