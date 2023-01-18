@@ -52,6 +52,8 @@ bool interpret(const s_node_t *node)
   
   bool err = int_body(&scope_global, node);
   
+  heap_clean();
+  
   scope_free(&scope_global);
   scope_global.scope_child = NULL;
   
@@ -216,8 +218,6 @@ bool int_ret_stmt(scope_t *scope, const s_node_t *node)
 bool int_print(scope_t *scope, const s_node_t *node)
 {
   s_node_t *arg = node->print.arg;
-  
-  c_debug("out: ");
   
   while (arg) {
     expr_t expr;
@@ -418,7 +418,8 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
     if (!arg) {
       c_error(
         node->proc.left_bracket,
-        "too few arguments to function");
+        "too few arguments to function '%h'",
+        node);
       return false;
     }
     
@@ -457,7 +458,8 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
   if (arg) {
     c_error(
       node->proc.left_bracket,
-      "too many arguments to function");
+      "too many arguments to function '%h'",
+      node);
     return false;
   }
   
@@ -624,7 +626,7 @@ bool int_index(scope_t *scope, expr_t *expr, const s_node_t *node)
     return false;
   
   if (!type_array(&base.type)) {
-    c_error(node->index.left_bracket, "subscripted value is not an array");
+    c_error(node->index.left_bracket, "subscripted value is not an array '%h'", node);
     return false;
   }
   
@@ -633,7 +635,11 @@ bool int_index(scope_t *scope, expr_t *expr, const s_node_t *node)
     return false;
   
   if (!type_cmp(&index.type, &type_i32)) {
-    c_error(node->index.left_bracket, "array subscript is not an integer");
+    c_error(
+      node->index.left_bracket,
+      "array subscript is of type '%z', not 'i32' '%h'",
+      &index.type,
+      node);
     return false;
   }
   

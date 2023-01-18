@@ -1,9 +1,11 @@
 #include "log.h"
 
 #include "data.h"
+#include "syntax.h"
 #include <stdlib.h>
 
 static void c_printf(const char *fmt, va_list args);
+static void s_node_print(const s_node_t *node);
 static void expr_print(const expr_t *expr);
 static void type_print(const type_t *type);
 static void lexeme_print(const lexeme_t *lexeme);
@@ -51,12 +53,67 @@ static void c_printf(const char *fmt, va_list args)
       case 's':
         printf("%s", va_arg(args, char*));
         break;
+      case 'h': // s_node_t expr
+        s_node_print(va_arg(args, const s_node_t *));
+        break;
+      default:
+        putc('%', stdout);
+        break;
       }
       
       *++fmt;
     } else {
       printf("%c", *fmt++);
     }
+  }
+}
+
+static void s_node_print(const s_node_t *node)
+{
+  if (!node)
+    return;
+  
+  switch (node->node_type) {
+  case S_BINOP:
+    s_node_print(node->binop.lhs);
+    lexeme_print(node->binop.op);
+    s_node_print(node->binop.rhs);
+    break;
+  case S_UNARY:
+    break;
+  case S_INDEX:
+    s_node_print(node->index.base);
+    putc('[', stdout);
+    s_node_print(node->index.index);
+    putc(']', stdout);
+    break;
+  case S_DIRECT:
+    s_node_print(node->direct.base);
+    putc('.', stdout);
+    printf("%s", node->direct.child_ident->data.ident);
+    break;
+  case S_PROC:
+    s_node_print(node->proc.base);
+    putc('(', stdout);
+    s_node_print(node->proc.arg);
+    putc(')', stdout);
+    break;
+  case S_CONSTANT:
+    lexeme_print(node->constant.lexeme);
+    break;
+  case S_NEW:
+    printf("new %s", node->new.class_ident->data.ident);
+    break;
+  case S_ARG:
+    s_node_print(node->arg.body);
+    if (node->arg.next) {
+      putc(',', stdout);
+      s_node_print(node->arg.next);
+    }
+    break;
+  default:
+    LOG_ERROR("unknown node_type (%i)", node->node_type);
+    break;
   }
 }
 
@@ -80,7 +137,14 @@ static void expr_print(const expr_t *expr)
     break;
   case SPEC_CLASS:
     type_print(&expr->type);
-    printf(" (%p)", expr->align_of);
+    printf(" [ %p ]", expr->align_of);
+    break;
+  case SPEC_FN:
+    printf("fn:");
+    fn_t *fn = (fn_t*) expr->align_of;
+    if (fn) {
+      type_print(&fn->type);
+    }
     break;
   }
 }
@@ -91,7 +155,8 @@ static void type_print(const type_t *type)
     "none",
     "i32",
     "f32",
-    "class"
+    "class",
+    "fn"
   };
   
   printf("%s", str_spec_table[type->spec]);
