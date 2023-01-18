@@ -24,6 +24,11 @@ bool type_cmp(const type_t *a, const type_t *b)
         && a->class == b->class;
 }
 
+bool type_fn(const type_t *type)
+{
+  return type->spec == SPEC_FN && type->size == 0;
+}
+
 bool type_class(const type_t *type)
 {
   return type->spec == SPEC_CLASS && type->size == 0;

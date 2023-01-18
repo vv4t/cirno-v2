@@ -1,6 +1,27 @@
-fn test() : i32 {
-  i32[4] a;
-  return a;
-}
+class_def vec3 {
+  f32 x;
+  f32 y;
+  f32 z;
+  
+  fn init(f32 _x, f32 _y, f32 _z) : class vec3
+  {
+    this.x = _x;
+    this.y = _y;
+    this.z = _z;
+    return this;
+  }
+};
 
-test();
+class_def player {
+  class vec3 pos;
+  
+  fn init() : class player
+  {
+    this.pos = new vec3.init(0.0, 0.0, 0.0);
+    return this;
+  }
+};
+
+class player player = new player.init();
+
+print player.pos.x;

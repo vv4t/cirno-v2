@@ -378,7 +378,7 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
   if (!int_expr(scope, &base, node->index.base))
     return false;
   
-  if (base.type.spec != SPEC_FN || type_array(&base.type)) {
+  if (!type_fn(&base.type)) {
     c_error(
       node->proc.left_bracket,
       "attempt to call non-function");
@@ -571,6 +571,22 @@ bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node)
     default:
       goto err_no_op;
     }
+  } else if (type_class(&lhs.type)
+  && type_class(&rhs.type)
+  && type_cmp(&lhs.type, &rhs.type)) {
+    switch (node->binop.op->token) {
+    case '=':
+      if (!expr_lvalue(&lhs)) {
+        c_error(node->binop.op, "lvalue required as left operand of assignment");
+        return false;
+      }
+      
+      mem_assign(lhs.loc_base, lhs.loc_offset, &rhs.type, &rhs);
+      *expr = lhs;
+      expr->align_of = rhs.align_of;
+      
+      break;
+    }
   } else {
 err_no_op:
     c_error(
@@ -590,7 +606,7 @@ bool int_direct(scope_t *scope, expr_t *expr, const s_node_t *node)
   if (!int_expr(scope, &base, node->direct.base))
     return false;
   
-  if (base.type.spec != SPEC_CLASS || type_array(&base.type)) {
+  if (!type_class(&base.type)) {
     c_error(
       node->direct.child_ident,
       "request for member '%s' in non-class",
@@ -745,6 +761,8 @@ static void mem_load(char *loc_base, int loc_offset, const type_t *type, expr_t 
     expr->i32 = *((int*) &loc_base[loc_offset]);
   else if (type_cmp(type, &type_f32))
     expr->f32 = *((float*) &loc_base[loc_offset]);
+  else
+    LOG_ERROR("unknown type '%z'", &type);
 }
 
 static void mem_assign(char *loc_base, int loc_offset, const type_t *type, expr_t *expr)
@@ -757,6 +775,8 @@ static void mem_assign(char *loc_base, int loc_offset, const type_t *type, expr_
     *((float*) &loc_base[loc_offset]) = expr->f32;
   else if (type_cmp(type, &type_none))
     *((size_t*) &loc_base[loc_offset]) = 0;
+  else
+    LOG_ERROR("unknown type '%z'", &type);
 }
 
 static heap_block_t *heap_alloc(int size)

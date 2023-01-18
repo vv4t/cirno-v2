@@ -71,6 +71,7 @@ extern type_t type_f32;
 
 extern bool type_cmp(const type_t *a, const type_t *b);
 extern bool type_class(const type_t *type);
+extern bool type_fn(const type_t *type);
 extern bool type_array(const type_t *type);
 extern int  type_size(const type_t *type);
 extern int  type_size_base(const type_t *type);
