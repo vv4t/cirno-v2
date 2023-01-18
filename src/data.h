@@ -6,19 +6,19 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-typedef struct class_s class_t;
 typedef struct scope_s scope_t;
 
 typedef enum {
   SPEC_NONE,
   SPEC_I32,
   SPEC_F32,
-  SPEC_CLASS
+  SPEC_CLASS,
+  SPEC_FN
 } spec_t;
 
 typedef struct {
   spec_t  spec;
-  class_t *class;
+  scope_t *class;
   int     size;
 } type_t;
 
@@ -34,7 +34,8 @@ typedef struct {
 } expr_t;
 
 struct scope_s {
-  const scope_t *find_parent;
+  const scope_t *scope_find;
+  const char    *ident;
   
   scope_t *scope_parent;
   scope_t *scope_child;
@@ -48,12 +49,6 @@ struct scope_s {
   bool    ret_flag;
   
   int     size;
-};
-
-struct class_s {
-  map_t       map_var;
-  int         size;
-  const char  *ident;
 };
 
 // HAHA THE OVERHEADS ITS LIKE 50B FOR ONE VARIABLE
@@ -81,18 +76,13 @@ extern int  type_size_base(const type_t *type);
 
 extern bool expr_lvalue(const expr_t *expr);
 
-extern void     class_new(class_t *class, const char *ident);
-extern void     class_free(class_t *class);
-extern var_t    *class_add_var(class_t *class, const type_t *type, const char *ident);
-extern var_t    *class_find_var(const class_t *class, const char *ident);
-
-extern void     scope_new(scope_t *scope, const type_t *ret_type, scope_t *scope_parent, const scope_t *find_parent);
+extern void     scope_new(scope_t *scope, const char *ident, const type_t *ret_type, scope_t *scope_parent, const scope_t *scope_find);
 extern void     scope_free(scope_t *scope);
 
 extern var_t    *scope_add_var(scope_t *scope, const type_t *type, const char *ident);
 extern var_t    *scope_find_var(const scope_t *scope, const char *ident);
-extern class_t  *scope_add_class(scope_t *scope, const char *ident, const class_t *class_data);
-extern class_t  *scope_find_class(const scope_t *scope, const char *ident);
+extern scope_t  *scope_add_class(scope_t *scope, const char *ident, const scope_t *class_data);
+extern scope_t  *scope_find_class(const scope_t *scope, const char *ident);
 extern fn_t     *scope_add_fn(scope_t *scope, const type_t *type, s_node_t *param, s_node_t *node, const char *ident);
 extern fn_t     *scope_find_fn(const scope_t *scope, const char *ident);
 

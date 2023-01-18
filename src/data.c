@@ -54,25 +54,13 @@ bool expr_lvalue(const expr_t *expr)
   return expr->loc_base != NULL;
 }
 
-void class_new(class_t *class, const char *ident)
-{
-  map_new(&class->map_var);
-  class->size = 0;
-  class->ident = ident;
-}
-
-void class_free(class_t *class)
-{
-  map_flush(&class->map_var, _zone_free);
-  ZONE_FREE(class);
-}
-
 static void _class_free(void *block)
 {
-  class_free((class_t*) block);
+  scope_free((scope_t*) block);
+  ZONE_FREE(block);
 }
 
-var_t *class_add_var(class_t *class, const type_t *type, const char *ident)
+var_t *class_add_var(scope_t *class, const type_t *type, const char *ident)
 {
   var_t *var = ZONE_ALLOC(sizeof(var_t));
   var->type = *type;
@@ -85,18 +73,18 @@ var_t *class_add_var(class_t *class, const type_t *type, const char *ident)
   return var;
 }
 
-var_t *class_find_var(const class_t *class, const char *ident)
+var_t *class_find_var(const scope_t *class, const char *ident)
 {
   return map_get(&class->map_var, ident);
 }
 
-void scope_new(scope_t *scope, const type_t *ret_type, scope_t *scope_parent, const scope_t *find_parent)
+void scope_new(scope_t *scope, const char *ident,const type_t *ret_type, scope_t *scope_parent, const scope_t *scope_find)
 {
-  scope->find_parent = find_parent;
-  
   if (scope_parent)
     scope_parent->scope_child = scope;
   
+  scope->ident = NULL;
+  scope->scope_find = scope_find;
   scope->scope_parent = scope_parent;
   scope->scope_child  = NULL;
   
@@ -137,17 +125,17 @@ var_t *scope_find_var(const scope_t *scope, const char *ident)
 {
   var_t *var = map_get(&scope->map_var, ident);
   if (!var) {
-    if (!scope->find_parent)
+    if (!scope->scope_find)
       return NULL;
-    return scope_find_var(scope->find_parent, ident);
+    return scope_find_var(scope->scope_find, ident);
   }
   
   return var;
 }
 
-class_t *scope_add_class(scope_t *scope, const char *ident, const class_t *class_data)
+scope_t *scope_add_class(scope_t *scope, const char *ident, const scope_t *class_data)
 {
-  class_t *class = ZONE_ALLOC(sizeof(class_t));
+  scope_t *class = ZONE_ALLOC(sizeof(scope_t));
   *class = *class_data;
   
   map_put(&scope->map_class, ident, class);
@@ -155,13 +143,13 @@ class_t *scope_add_class(scope_t *scope, const char *ident, const class_t *class
   return class;
 }
 
-class_t *scope_find_class(const scope_t *scope, const char *ident)
+scope_t *scope_find_class(const scope_t *scope, const char *ident)
 {
-  class_t *class = map_get(&scope->map_class, ident);
+  scope_t *class = map_get(&scope->map_class, ident);
   if (!class) {
-    if (!scope->find_parent)
+    if (!scope->scope_find)
       return NULL;
-    return scope_find_class(scope->find_parent, ident);
+    return scope_find_class(scope->scope_find, ident);
   }
   
   return class;
@@ -186,7 +174,7 @@ fn_t *scope_find_fn(const scope_t *scope, const char *ident)
   if (!fn) {
     if (!scope->scope_parent)
       return NULL;
-    return scope_find_fn(scope->find_parent, ident);
+    return scope_find_fn(scope->scope_find, ident);
   }
   
   return fn;

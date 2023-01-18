@@ -24,6 +24,8 @@ static bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node);
 static bool int_constant(scope_t *scope, expr_t *expr, const s_node_t *node);
 static bool int_new(scope_t *scope, expr_t *expr, const s_node_t *node);
 
+static bool int_load_ident(const scope_t *scope, char *loc_base, expr_t *expr, const lexeme_t *lexeme);
+
 static char mem_stack[512];
 static void mem_load(char *loc_base, int loc_offset, const type_t *type, expr_t *expr);
 static void mem_assign(char *loc_base, int loc_offset, const type_t *type, expr_t *expr);
@@ -47,7 +49,7 @@ static scope_t      scope_global;
 
 bool interpret(const s_node_t *node)
 {
-  scope_new(&scope_global, &type_none, NULL, NULL);
+  scope_new(&scope_global, NULL, &type_none, NULL, NULL);
   
   bool err = int_body(&scope_global, node);
   
@@ -60,7 +62,7 @@ bool interpret(const s_node_t *node)
 bool int_body(scope_t *scope, const s_node_t *node)
 {
   scope_t new_scope;
-  scope_new(&new_scope, &scope->ret_type, scope, scope);
+  scope_new(&new_scope, NULL, &scope->ret_type, scope, scope);
   new_scope.size = scope->size;
   
   const s_node_t *head = node;
@@ -238,26 +240,17 @@ bool int_class_def(scope_t *scope, const s_node_t *node)
     return false;
   }
   
-  class_t class;
-  class_new(&class, node->class_def.ident->data.ident);
+  scope_t class;
+  scope_new(&class, node->class_def.ident->data.ident, &type_none, NULL, NULL);
   
   s_node_t *head = node->class_def.class_decl;
   while (head) {
-    type_t type;
-    if (!int_type(scope, &type, head->class_decl.type))
-      return false;
-    
-    if (class_find_var(&class, head->class_decl.ident->data.ident)) {
-      c_error(
-        node->class_def.ident,
-        "redefinition of '%s' in class '%s'",
-        head->class_decl.ident->data.ident,
-        node->class_def.ident->data.ident);
+    if (!int_stmt(&class, head)) {
+      scope_free(&class);
       return false;
     }
     
-    class_add_var(&class, &type, head->class_decl.ident->data.ident);
-    head = head->class_decl.next;
+    head = head->stmt.next;
   }
   
   scope_add_class(scope, node->class_def.ident->data.ident, &class);
@@ -373,18 +366,28 @@ bool int_expr(scope_t *scope, expr_t *expr, const s_node_t *node)
 
 bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
 {
-  fn_t *fn = scope_find_fn(scope, node->proc.func_ident->data.ident);
+  expr_t base;
+  if (!int_expr(scope, &base, node->index.base))
+    return false;
+  
+  if (base.type.spec != SPEC_FN || type_array(&base.type)) {
+    c_error(
+      node->proc.left_bracket,
+      "attempt to call non-function");
+    return false;
+  }
+  
+  fn_t *fn = (fn_t*) base.align_of;
   
   if (!fn) {
     c_error(
-      node->proc.func_ident,
-      "'%s' undeclared",
-      node->proc.func_ident->data.ident);
+      node->proc.left_bracket,
+      "attempt to call invalid function");
     return false;
   }
   
   scope_t new_scope;
-  scope_new(&new_scope, &fn->type, scope, fn->scope_parent);
+  scope_new(&new_scope, NULL, &fn->type, scope, fn->scope_parent);
   new_scope.ret_type = fn->type;
   new_scope.size += scope->size;
   
@@ -393,9 +396,8 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
   while (head) {
     if (!arg) {
       c_error(
-        node->proc.func_ident,
-        "too few arguments to function '%s'",
-        node->proc.func_ident->data.ident);
+        node->proc.left_bracket,
+        "too few arguments to function");
       return false;
     }
     
@@ -433,9 +435,8 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
   
   if (arg) {
     c_error(
-      node->proc.func_ident,
-      "too many arguments to function '%s'",
-      node->proc.func_ident->data.ident);
+      node->proc.left_bracket,
+      "too many arguments to function");
     return false;
   }
   
@@ -582,8 +583,9 @@ bool int_direct(scope_t *scope, expr_t *expr, const s_node_t *node)
     return false;
   }
   
-  var_t *var = class_find_var(base.type.class, node->direct.child_ident->data.ident);
-  if (!var) {
+  heap_block_t *heap_block = (heap_block_t*) base.align_of;
+  
+  if (!int_load_ident(base.type.class, heap_block->block, expr, node->direct.child_ident)) {
     c_error(
       node->direct.child_ident,
       "'class %s' has no member named '%s'",
@@ -591,13 +593,6 @@ bool int_direct(scope_t *scope, expr_t *expr, const s_node_t *node)
       node->direct.child_ident->data.ident);
     return false;
   }
-  
-  heap_block_t *heap_block = (heap_block_t*) base.align_of;
-  
-  expr->type = var->type;
-  expr->loc_base = heap_block->block;
-  expr->loc_offset = var->loc;
-  mem_load(expr->loc_base, expr->loc_offset, &expr->type, expr);
   
   return true;
 }
@@ -632,7 +627,7 @@ bool int_index(scope_t *scope, expr_t *expr, const s_node_t *node)
 
 bool int_new(scope_t *scope, expr_t *expr, const s_node_t *node)
 {
-  class_t *class = scope_find_class(scope, node->new.class_ident->data.ident);
+  scope_t *class = scope_find_class(scope, node->new.class_ident->data.ident);
   
   if (!class) {
     c_error(
@@ -669,21 +664,39 @@ bool int_constant(scope_t *scope, expr_t *expr, const s_node_t *node)
     expr->loc_offset = 0;
     break;
   case TK_IDENTIFIER:
-    var = scope_find_var(scope, node->constant.lexeme->data.ident);
-    
-    if (!var) {
+    if (!int_load_ident(scope, mem_stack, expr, node->constant.lexeme)) {
       c_error(
         node->constant.lexeme,
         "'%s' undeclared",
         node->constant.lexeme->data.ident);
       return false;
     }
-    
-    mem_load(mem_stack, var->loc, &var->type, expr);
     break;
   }
   
   return true;
+}
+
+static bool int_load_ident(const scope_t *scope, char *loc_base, expr_t *expr, const lexeme_t *lexeme)
+{
+  var_t *var = scope_find_var(scope, lexeme->data.ident);
+  if (var) {
+    mem_load(loc_base, var->loc, &var->type, expr);
+    return true;
+  }
+  
+  fn_t *fn = scope_find_fn(scope, lexeme->data.ident);
+  if (fn) {
+    expr->type.spec = SPEC_FN;
+    expr->type.size = 0;
+    expr->type.class = NULL;
+    expr->align_of = (size_t) fn;
+    expr->loc_base = loc_base;
+    expr->loc_offset = 0;
+    return true;
+  }
+  
+  return false;
 }
 
 static void mem_load(char *loc_base, int loc_offset, const type_t *type, expr_t *expr)

@@ -10,7 +10,6 @@ typedef enum {
   S_TYPE,
   S_DECL,
   S_CLASS_DEF,
-  S_CLASS_DECL,
   S_STMT,
   S_INDEX,
   S_DIRECT,
@@ -45,11 +44,6 @@ typedef struct s_node_s {
       const lexeme_t  *ident;
       struct s_node_s *init;
     } decl;
-    struct {
-      struct s_node_s *type;
-      const lexeme_t  *ident;
-      struct s_node_s *next;
-    } class_decl;
     struct {
       const lexeme_t  *ident;
       struct s_node_s *class_decl;
@@ -99,8 +93,9 @@ typedef struct s_node_s {
       struct s_node_s *next;
     } param_decl;
     struct {
-      const lexeme_t  *func_ident;
+      struct s_node_s *base;
       struct s_node_s *arg;
+      const lexeme_t  *left_bracket;
     } proc;
     struct {
       struct s_node_s *body;
