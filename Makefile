@@ -6,4 +6,4 @@ cirno: src/*.c src/*.h
 	gcc src/*.c -g -o cirno
 
 run:
-	./cirno
+	./cirno main.cn

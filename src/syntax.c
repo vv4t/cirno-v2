@@ -309,6 +309,7 @@ static s_node_t *s_type(lex_t *lex)
   
   if ((spec = lex_match(lex, TK_I32)));
   else if ((spec = lex_match(lex, TK_F32)));
+  else if ((spec = lex_match(lex, TK_STRING)));
   else if ((spec = lex_match(lex, TK_CLASS))) {
     class_ident = s_expect(lex, TK_IDENTIFIER);
   } else
@@ -342,7 +343,7 @@ static s_node_t *s_binop(lex_t *lex, int op_set)
     while ((op = lex_match(lex, op_set_table[op_set].op[i]))) {
       s_node_t *rhs = s_binop(lex, op_set + 1);
       if (!rhs)
-        c_error(lex->lexeme, "error: expected 'expression' before '%l'", lex->lexeme);
+        c_error(lex->lexeme, "expected 'expression' before '%l'", lex->lexeme);
       
       lhs = make_binop(lhs, op, rhs);
     }
@@ -403,6 +404,8 @@ static s_node_t *s_primary(lex_t *lex)
     const lexeme_t *class_ident = s_expect(lex, TK_IDENTIFIER);
     return make_new(class_ident);
   } else if ((lexeme = lex_match(lex, TK_IDENTIFIER)))
+    return make_constant(lexeme);
+  else if ((lexeme = lex_match(lex, TK_STRING_LITERAL)))
     return make_constant(lexeme);
   else if (lex_match(lex, '(')) {
     s_node_t *body = s_expect_rule(lex, R_EXPR);

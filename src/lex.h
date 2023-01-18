@@ -2,6 +2,7 @@
 #define LEX_H
 
 #include <stdarg.h>
+#include <stdbool.h>
 
 typedef enum {
   TK_CONST_INTEGER = 256,
@@ -18,6 +19,8 @@ typedef enum {
   TK_FN,
   TK_RETURN,
   TK_NEW,
+  TK_STRING_LITERAL,
+  TK_STRING,
   TK_EOF
 } token_t;
 
@@ -27,6 +30,7 @@ typedef struct lexeme_s {
     int     i32;
     float   f32;
     char    *ident;
+    char    *string_literal;
   } data;
   int             line;
   const char      *src;
@@ -41,7 +45,7 @@ typedef struct {
   int         eof_line;
 } lex_t;
 
-extern lex_t          lex_parse(const char *src);
+extern bool           lex_parse(lex_t *lex, const char *src);
 extern const lexeme_t *lex_match(lex_t *lex, token_t);
 extern void           lex_next(lex_t *lex);
 extern void           lex_free(lex_t *lex);

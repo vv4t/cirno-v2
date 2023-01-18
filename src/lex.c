@@ -33,6 +33,7 @@ static word_t word_table[] = {
   { "fn",         TK_FN         },
   { "return",     TK_RETURN     },
   { "new",        TK_NEW        },
+  { "string",     TK_STRING     },
   { "if",         TK_IF         }
 };
 
@@ -64,20 +65,19 @@ static int num_op_table = sizeof(op_table) / sizeof(op_t);
 
 static lexeme_t *make_lexeme(token_t token, const lex_file_t *lex);
 static lexeme_t *match_const_integer(lex_file_t *lex);
+static lexeme_t *match_string_literal(lex_file_t *lex);
 static lexeme_t *match_word(lex_file_t *lex);
 static lexeme_t *match_op(lex_file_t *lex);
 static void     token_print(token_t token);
 static void     lexeme_print(const lexeme_t *lexeme);
 static void     lex_printf(const lexeme_t *lexeme, const char *fmt, va_list args);
 
-lex_t lex_parse(const char *src)
+bool lex_parse(lex_t *lex, const char *src)
 {
   FILE *fp = fopen(src, "rb");
   
-  if (!fp) {
-    LOG_ERROR("failed to open file: main.bs");
-    exit(1);
-  }
+  if (!fp)
+    return false;
   
   fseek(fp, 0, SEEK_END);
   size_t size = ftell(fp);
@@ -98,6 +98,8 @@ lex_t lex_parse(const char *src)
   
   while (*lex_file.c) {
     lexeme_t *lexeme = match_const_integer(&lex_file);
+    if (!lexeme)
+      lexeme = match_string_literal(&lex_file);
     if (!lexeme)
       lexeme = match_word(&lex_file);
     if (!lexeme)
@@ -126,7 +128,7 @@ lex_t lex_parse(const char *src)
   
   head->next = make_lexeme(TK_EOF, &lex_file);
   
-  lex_t lex = {
+  *lex = (lex_t) {
     .src = src,
     .buffer = buffer,
     .lexeme = body,
@@ -134,7 +136,7 @@ lex_t lex_parse(const char *src)
     .eof_line = lex_file.line
   };
   
-  return lex;
+  return true;
 }
 
 void lex_free(lex_t *lex)
@@ -146,6 +148,9 @@ void lex_free(lex_t *lex)
     switch (lexeme->token) {
     case TK_IDENTIFIER:
       ZONE_FREE(lexeme->data.ident);
+      break;
+    case TK_STRING_LITERAL:
+      ZONE_FREE(lexeme->data.string_literal);
       break;
     }
     
@@ -245,6 +250,34 @@ static lexeme_t *match_word(lex_file_t *lex)
   
   lexeme_t *lexeme = make_lexeme(TK_IDENTIFIER, lex);
   lexeme->data.ident = str_ident;
+  return lexeme;
+}
+
+static lexeme_t *match_string_literal(lex_file_t *lex)
+{
+  if (*lex->c != '"')
+    return NULL;
+  
+  const char *str_start = lex->c;
+  int str_len = 0;
+  
+  do
+    lex->c++;
+  while (*lex->c != '"' && *lex->c != 0);
+  
+  if (*lex->c == 0) {
+    printf("%s:%i:error: missing terminating '\"'\n", lex->file, lex->line);
+    return NULL;
+  }
+  
+  str_len = lex->c - str_start - 1;
+  lex->c++;
+  
+  char *string_literal = ZONE_ALLOC(str_len + 1);
+  strncpy(string_literal, str_start + 1, str_len);
+  
+  lexeme_t *lexeme = make_lexeme(TK_STRING_LITERAL, lex);
+  lexeme->data.string_literal = string_literal;
   return lexeme;
 }
 

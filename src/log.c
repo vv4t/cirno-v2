@@ -142,9 +142,11 @@ static void expr_print(const expr_t *expr)
   case SPEC_FN:
     printf("fn:");
     fn_t *fn = (fn_t*) expr->align_of;
-    if (fn) {
+    if (fn)
       type_print(&fn->type);
-    }
+    break;
+  case SPEC_STRING:
+    printf("%s", (const char*) expr->align_of);
     break;
   }
 }
@@ -156,7 +158,8 @@ static void type_print(const type_t *type)
     "i32",
     "f32",
     "class",
-    "fn"
+    "fn",
+    "string"
   };
   
   printf("%s", str_spec_table[type->spec]);
@@ -181,6 +184,9 @@ static void lexeme_print(const lexeme_t *lexeme)
     case TK_IDENTIFIER:
       printf("%s", lexeme->data.ident);
       break;
+    case TK_STRING_LITERAL:
+      printf("\"%s\"", lexeme->data.string_literal);
+      break;
     default:
       token_print(lexeme->token);
       break;
@@ -193,21 +199,23 @@ static void lexeme_print(const lexeme_t *lexeme)
 static void token_print(token_t token)
 {
   const char *str_token_table[] = {
-    "integer",    // TK_CONST_INTEGER
-    "float",      // TK_CONST_FLOAT
-    "identifier", // TK_IDENTIFIER
-    "i32",        // TK_I32
-    "f32",        // TK_F32
-    "if",         // TK_IF
-    "class",      // TK_CLASS
-    "class_def",  // TK_CLASS_DEF
-    "print",      // TK_PRINT
-    "while",      // TK_WHILE
-    "->",         // TK_PTR_OP
-    "fn",         // TK_FN
-    "return",     // TK_RETURN
-    "new",        // TK_NEW
-    "EOF"         // TK_EOF
+    "integer",        // TK_CONST_INTEGER
+    "float",          // TK_CONST_FLOAT
+    "identifier",     // TK_IDENTIFIER
+    "i32",            // TK_I32
+    "f32",            // TK_F32
+    "if",             // TK_IF
+    "class",          // TK_CLASS
+    "class_def",      // TK_CLASS_DEF
+    "print",          // TK_PRINT
+    "while",          // TK_WHILE
+    "->",             // TK_PTR_OP
+    "fn",             // TK_FN
+    "return",         // TK_RETURN
+    "new",            // TK_NEW
+    "string-literal", // TK_STRING_LITERAL
+    "string",         // TK_STRING
+    "EOF"             // TK_EOF
   };
   
   if (token < TK_CONST_INTEGER) {

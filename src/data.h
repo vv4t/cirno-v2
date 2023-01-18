@@ -13,7 +13,8 @@ typedef enum {
   SPEC_I32,
   SPEC_F32,
   SPEC_CLASS,
-  SPEC_FN
+  SPEC_FN,
+  SPEC_STRING
 } spec_t;
 
 typedef struct {
@@ -68,6 +69,7 @@ typedef struct {
 extern type_t type_none;
 extern type_t type_i32;
 extern type_t type_f32;
+extern type_t type_string;
 
 extern bool type_cmp(const type_t *a, const type_t *b);
 extern bool type_class(const type_t *type);

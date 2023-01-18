@@ -39,7 +39,7 @@ void *zone_alloc(const char *src, int line, int size)
   return mem_block;
 }
 
-void zone_free(const char *src, int line, void *block)
+void zone_free(void *block)
 {
   zone_block_t *zone_block = (zone_block_t*) ((char*) block - sizeof(zone_block_t));
   

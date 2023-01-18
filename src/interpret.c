@@ -2,6 +2,7 @@
 
 #include "log.h"
 #include "zone.h"
+#include <string.h>
 
 typedef struct heap_block_s {
   char  *block;
@@ -314,6 +315,9 @@ bool int_type(scope_t *scope, type_t *type, const s_node_t *node)
     break;
   case TK_F32:
     type->spec = SPEC_F32;
+    break;
+  case TK_STRING:
+    type->spec = SPEC_STRING;
     break;
   case TK_CLASS:
     type->spec = SPEC_CLASS;
@@ -705,6 +709,12 @@ bool int_constant(scope_t *scope, expr_t *expr, const s_node_t *node)
     expr->loc_base = NULL;
     expr->loc_offset = 0;
     break;
+  case TK_STRING_LITERAL:
+    expr->type = type_string;
+    expr->align_of = (size_t) node->constant.lexeme->data.string_literal;
+    expr->loc_base = NULL;
+    expr->loc_offset = 0;
+    break;
   case TK_IDENTIFIER:
     if (!int_load_ident(scope, NULL, expr, node->constant.lexeme)) {
       c_error(
@@ -713,6 +723,9 @@ bool int_constant(scope_t *scope, expr_t *expr, const s_node_t *node)
         node->constant.lexeme->data.ident);
       return false;
     }
+    break;
+  default:
+    LOG_ERROR("unknown token (%i)", node->constant.lexeme->token);
     break;
   }
   
@@ -761,22 +774,22 @@ static void mem_load(char *loc_base, int loc_offset, const type_t *type, expr_t 
     expr->i32 = *((int*) &loc_base[loc_offset]);
   else if (type_cmp(type, &type_f32))
     expr->f32 = *((float*) &loc_base[loc_offset]);
-  else
-    LOG_ERROR("unknown type '%z'", &type);
+  else if (type_cmp(type, &type_string))
+    expr->align_of = *((size_t*) &loc_base[loc_offset]);
 }
 
 static void mem_assign(char *loc_base, int loc_offset, const type_t *type, expr_t *expr)
 {
   if (type_class(type))
-    *((unsigned long long*) &loc_base[loc_offset]) = (size_t) expr->align_of;
+    *((size_t*) &loc_base[loc_offset]) = (size_t) expr->align_of;
   else if (type_cmp(type, &type_i32))
     *((int*) &loc_base[loc_offset]) = expr->i32;
   else if (type_cmp(type, &type_f32))
     *((float*) &loc_base[loc_offset]) = expr->f32;
+  else if (type_cmp(type, &type_string))
+    *((size_t*) &loc_base[loc_offset]) = expr->align_of;
   else if (type_cmp(type, &type_none))
     *((size_t*) &loc_base[loc_offset]) = 0;
-  else
-    LOG_ERROR("unknown type '%z'", &type);
 }
 
 static heap_block_t *heap_alloc(int size)
@@ -784,6 +797,8 @@ static heap_block_t *heap_alloc(int size)
   heap_block_t *heap_block = ZONE_ALLOC(sizeof(heap_block_t));
   heap_block->block = ZONE_ALLOC(size);
   heap_block->use = false;
+  
+  memset(heap_block->block, 0, size);
   
   if (heap_block_list) {
     heap_block->next = heap_block_list;

@@ -4,8 +4,9 @@
 #include <stdio.h>
 
 type_t type_none = {0};
-type_t type_i32 = { .spec = SPEC_I32, .size = 0 };
-type_t type_f32 = { .spec = SPEC_F32, .size = 0 };
+type_t type_i32     = { .spec = SPEC_I32,     .size = 0, .class = NULL };
+type_t type_f32     = { .spec = SPEC_F32,     .size = 0, .class = NULL };
+type_t type_string  = { .spec = SPEC_STRING,  .size = 0, .class = NULL };
 
 static void _zone_free(void *block)
 {
