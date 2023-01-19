@@ -4,50 +4,47 @@
 #include <stdio.h>
 
 type_t type_none = {0};
-type_t type_i32     = { .spec = SPEC_I32,     .size = 0, .class = NULL };
-type_t type_f32     = { .spec = SPEC_F32,     .size = 0, .class = NULL };
-type_t type_string  = { .spec = SPEC_STRING,  .size = 0, .class = NULL };
-
-static void _zone_free(void *block)
-{
-  ZONE_FREE(block);
-}
-
-static void _zone_free_2(void *block)
-{
-  ZONE_FREE(block);
-}
+type_t type_i32     = { .spec = SPEC_I32,     .arr = false, .class = NULL };
+type_t type_f32     = { .spec = SPEC_F32,     .arr = false, .class = NULL };
+type_t type_string  = { .spec = SPEC_STRING,  .arr = false, .class = NULL };
 
 bool type_cmp(const type_t *a, const type_t *b)
 {
   return a->spec == b->spec
-        && a->size == b->size
+        && a->arr == b->arr
         && a->class == b->class;
 }
 
 bool type_fn(const type_t *type)
 {
-  return type->spec == SPEC_FN && type->size == 0;
+  return type->spec == SPEC_FN && !type_array(type);
 }
 
 bool type_class(const type_t *type)
 {
-  return type->spec == SPEC_CLASS && type->size == 0;
+  return type->spec == SPEC_CLASS && !type_array(type);
 }
 
 bool type_array(const type_t *type)
 {
-  return type->size > 0;
+  return type->arr;
 }
 
 int type_size(const type_t *type)
 {
-  if (type->size > 0)
-    return type_size_base(type) * type->size;
-  else
-    return type_size_base(type);
-}
+  if (type->arr)
+    return 8;
   
+  switch (type->spec) {
+  case SPEC_I32:
+    return 4;
+  case SPEC_F32:
+    return 4;
+  case SPEC_CLASS:
+    return 8;
+  }
+}
+
 int type_size_base(const type_t *type)
 {
   switch (type->spec) {
@@ -115,8 +112,8 @@ void scope_free(scope_t *scope)
     scope->scope_parent->scope_child = NULL;
   
   map_flush(&scope->map_class, _class_free);
-  map_flush(&scope->map_var, _zone_free_2);
-  map_flush(&scope->map_fn, _zone_free);
+  map_flush(&scope->map_var, zone_free);
+  map_flush(&scope->map_fn, zone_free);
 }
 
 var_t *scope_add_var(scope_t *scope, const type_t *type, const char *ident)

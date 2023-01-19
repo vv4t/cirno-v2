@@ -21,6 +21,7 @@ typedef enum {
   TK_NEW,
   TK_STRING_LITERAL,
   TK_STRING,
+  TK_ARRAY_INIT,
   TK_EOF
 } token_t;
 

@@ -1,6 +1,5 @@
-i32[32] prime;
-
 i32 n = 32;
+i32[] prime = array_init<i32>(n);
 
 i32 i = 0;
 while (i < n) {

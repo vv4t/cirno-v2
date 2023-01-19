@@ -22,6 +22,7 @@ typedef enum {
   S_RET_STMT,
   S_PROC,
   S_NEW,
+  S_ARRAY_INIT,
   S_ARG
 } s_node_type_t;
 
@@ -36,7 +37,7 @@ typedef struct s_node_s {
     } constant;
     struct {
       const lexeme_t  *spec;
-      struct s_node_s *size;
+      const lexeme_t  *left_bracket;
       const lexeme_t  *class_ident;
     } type;
     struct {
@@ -104,6 +105,11 @@ typedef struct s_node_s {
     struct {
       const lexeme_t  *class_ident;
     } new;
+    struct {
+      const lexeme_t *array_init;
+      struct s_node_s *type;
+      struct s_node_s *size;
+    } array_init;
   };
   s_node_type_t node_type;
 } s_node_t;

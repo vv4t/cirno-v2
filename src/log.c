@@ -167,8 +167,8 @@ static void type_print(const type_t *type)
   if (type->spec == SPEC_CLASS)
     printf(" %s", type->class->ident);
   
-  if (type->size)
-    printf("[%i]", type->size);
+  if (type->arr)
+    printf("[]");
 }
 
 static void lexeme_print(const lexeme_t *lexeme)
@@ -215,6 +215,7 @@ static void token_print(token_t token)
     "new",            // TK_NEW
     "string-literal", // TK_STRING_LITERAL
     "string",         // TK_STRING
+    "array_init",     // TK_ARRAY_INIT
     "EOF"             // TK_EOF
   };
   

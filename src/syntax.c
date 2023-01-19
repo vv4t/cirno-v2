@@ -42,7 +42,6 @@ static s_node_t *s_arg(lex_t *lex);
 static s_node_t *s_primary(lex_t *lex);
 
 static void s_print_node_R(const s_node_t *node, int pad);
-void s_print_node(const s_node_t *node);
 
 typedef enum {
   R_BODY,
@@ -64,7 +63,7 @@ static s_node_t *make_if_stmt(s_node_t *cond, s_node_t *body);
 static s_node_t *make_while_stmt(s_node_t *cond, s_node_t *body);
 static s_node_t *make_class_def(const lexeme_t *ident, s_node_t *class_decl);
 static s_node_t *make_decl(s_node_t *type, const lexeme_t *ident, s_node_t *init);
-static s_node_t *make_type(const lexeme_t *spec, s_node_t *size, const lexeme_t *class_ident);
+static s_node_t *make_type(const lexeme_t *spec, const lexeme_t *left_bracket, const lexeme_t *class_ident);
 static s_node_t *make_constant(const lexeme_t *lexeme);
 static s_node_t *make_new(const lexeme_t *class_ident);
 static s_node_t *make_unary(const lexeme_t *op, s_node_t *rhs);
@@ -75,6 +74,7 @@ static s_node_t *make_print(s_node_t *body);
 static s_node_t *make_ret_stmt(const lexeme_t *ret_token, s_node_t *body);
 static s_node_t *make_proc(s_node_t *base, s_node_t *arg, const lexeme_t *left_bracket);
 static s_node_t *make_arg(s_node_t *body, s_node_t *next);
+static s_node_t *make_array_init(const lexeme_t *array_init, s_node_t *type, s_node_t *size);
 static s_node_t *make_node(s_node_type_t type);
 
 s_node_t *s_parse(lex_t *lex)
@@ -315,13 +315,11 @@ static s_node_t *s_type(lex_t *lex)
   } else
     return NULL;
   
-  s_node_t *size = NULL;
-  if (lex_match(lex, '[')) {
-    size = s_expect_rule(lex, R_EXPR);
+  const lexeme_t *left_bracket = NULL;
+  if ((left_bracket = lex_match(lex, '[')))
     s_expect(lex, ']');
-  }
   
-  return make_type(spec, size, class_ident);
+  return make_type(spec, left_bracket, class_ident);
 }
 
 static s_node_t *s_expr(lex_t *lex)
@@ -362,18 +360,26 @@ static s_node_t *s_postfix(lex_t *lex)
   s_node_t *base = s_primary(lex);
   
   while (1) {
-    const lexeme_t *left_bracket = NULL;
-    if ((left_bracket = lex_match(lex, '['))) {
+    const lexeme_t *lexeme = NULL;
+    if ((lexeme = lex_match(lex, '['))) {
       s_node_t *index = s_expect_rule(lex, R_EXPR);
       s_expect(lex, ']');
-      base = make_index(base, index, left_bracket);
+      base = make_index(base, index, lexeme);
     } else if (lex_match(lex, '.')) {
       const lexeme_t *child_ident = s_expect(lex, TK_IDENTIFIER);
       base = make_direct(base, child_ident);
-    } else if ((left_bracket = lex_match(lex, '('))) {
+    } else if ((lexeme = lex_match(lex, '('))) {
       s_node_t *arg = s_arg(lex);
       s_expect(lex, ')');
-      base = make_proc(base, arg, left_bracket);
+      base = make_proc(base, arg, lexeme);
+    } else if ((lexeme = lex_match(lex, TK_ARRAY_INIT))) {
+      s_expect(lex, '<');
+      s_node_t *type = s_type(lex);
+      s_expect(lex, '>');
+      s_expect(lex, '(');
+      s_node_t *size = s_expect_rule(lex, R_EXPR);
+      s_expect(lex, ')');
+      return make_array_init(lexeme, type, size);
     } else {
       return base;
     }
@@ -533,11 +539,11 @@ static s_node_t *make_decl(s_node_t *type, const lexeme_t *ident, s_node_t *init
   return node;
 }
 
-static s_node_t *make_type(const lexeme_t *spec, s_node_t *size, const lexeme_t *class_ident)
+static s_node_t *make_type(const lexeme_t *spec, const lexeme_t *left_bracket, const lexeme_t *class_ident)
 {
   s_node_t *node = make_node(S_TYPE);
   node->type.spec = spec;
-  node->type.size = size;
+  node->type.left_bracket = left_bracket;
   node->type.class_ident = class_ident;
   return node;
 }
@@ -607,6 +613,15 @@ static s_node_t *make_new(const lexeme_t *class_ident)
   return node;
 }
 
+static s_node_t *make_array_init(const lexeme_t *array_init, s_node_t *type, s_node_t *size)
+{
+  s_node_t *node = make_node(S_ARRAY_INIT);
+  node->array_init.array_init = array_init;
+  node->array_init.type = type;
+  node->array_init.size = size;
+  return node;
+}
+
 static s_node_t *make_node(s_node_type_t node_type)
 {
   s_node_t *node = ZONE_ALLOC(sizeof(s_node_t));
@@ -633,7 +648,6 @@ static void s_print_node_R(const s_node_t *node, int pad)
     break;
   case S_TYPE:
     LOG_DEBUG("%*sS_TYPE", pad, "");
-    s_print_node_R(node->type.size, pad + 2);
     break;
   case S_DECL:
     LOG_DEBUG("%*sS_DECL", pad, "");
@@ -703,6 +717,11 @@ static void s_print_node_R(const s_node_t *node, int pad)
   case S_NEW:
     LOG_DEBUG("%*sS_NEW", pad, "");
     break;
+  case S_ARRAY_INIT:
+    LOG_DEBUG("%*sS_ARRAY_INIT", pad, "");
+    s_print_node_R(node->array_init.type, pad + 2);
+    s_print_node_R(node->array_init.size, pad + 2);
+    break;
   default:
     LOG_ERROR("unknown s_node_t (%i)", node->node_type);
     break;
@@ -727,7 +746,6 @@ void s_free(s_node_t *node)
     s_free(node->binop.rhs);
     break;
   case S_TYPE:
-    s_free(node->type.size);
     break;
   case S_DECL:
     s_free(node->decl.type);
@@ -782,6 +800,10 @@ void s_free(s_node_t *node)
     s_free(node->ret_stmt.body);
     break;
   case S_NEW:
+    break;
+  case S_ARRAY_INIT:
+    s_free(node->array_init.type);
+    s_free(node->array_init.size);
     break;
   default:
     LOG_ERROR("unknown s_node_t (%i)", node->node_type);

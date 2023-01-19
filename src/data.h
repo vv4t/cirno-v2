@@ -19,7 +19,7 @@ typedef enum {
 
 typedef struct {
   spec_t        spec;
-  int           size;
+  bool          arr;
   const scope_t *class;
 } type_t;
 

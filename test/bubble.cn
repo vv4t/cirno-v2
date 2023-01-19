@@ -1,5 +1,5 @@
 i32 n = 5;
-i32[n] data;
+i32[] data = array_init<i32>(n);
 
 data[0] = 10;
 data[1] = 1;
