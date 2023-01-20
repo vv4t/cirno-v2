@@ -216,6 +216,14 @@ static void token_print(token_t token)
     "string-literal", // TK_STRING_LITERAL
     "string",         // TK_STRING
     "array_init",     // TK_ARRAY_INIT
+    "++",             // TK_INC
+    "--",             // TK_DEC
+    ">=",             // TK_GE
+    "<=",             // TK_LE
+    "==",             // TK_EQ
+    "!=",             // TK_NE
+    "&&",             // TK_AND
+    "||",             // TK_OR
     "EOF"             // TK_EOF
   };
   

@@ -22,6 +22,14 @@ typedef enum {
   TK_STRING_LITERAL,
   TK_STRING,
   TK_ARRAY_INIT,
+  TK_INC,
+  TK_DEC,
+  TK_GE,
+  TK_LE,
+  TK_EQ,
+  TK_NE,
+  TK_AND,
+  TK_OR,
   TK_EOF
 } token_t;
 

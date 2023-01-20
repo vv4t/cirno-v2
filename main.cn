@@ -1,9 +1,1 @@
-fn test(i32 a) : i32;
-
-i32 d = 0;
-
-fn hi(i32 a)
-{
-  d = d + 1;
-  print d, test(3);
-}
+print !(4.0 >= 3.0 && 3 < 4);

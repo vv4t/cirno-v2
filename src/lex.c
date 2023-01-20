@@ -42,6 +42,14 @@ static int num_word_table = sizeof(word_table) / sizeof(word_t);
 
 static op_t op_table[] = {
   { "->",   TK_PTR_OP   },
+  { "++",   TK_INC      },
+  { "--",   TK_DEC      },
+  { ">=",   TK_GE       },
+  { "<=",   TK_LE       },
+  { "==",   TK_EQ       },
+  { "!=",   TK_NE       },
+  { "&&",   TK_AND      },
+  { "||",   TK_OR       },
   { "-",    '-'         },
   { "+",    '+'         },
   { "*",    '*'         },
@@ -54,6 +62,7 @@ static op_t op_table[] = {
   { ";",    ';'         },
   { ":",    ':'         },
   { "&",    '&'         },
+  { "!",    '!'         },
   { "{",    '{'         },
   { "}",    '}'         },
   { "[",    '['         },

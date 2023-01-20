@@ -46,6 +46,7 @@ static bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node);
 static bool int_constant(scope_t *scope, expr_t *expr, const s_node_t *node);
 static bool int_new(scope_t *scope, expr_t *expr, const s_node_t *node);
 static bool int_array_init(scope_t *scope, expr_t *expr, const s_node_t *node);
+static bool int_post_op(scope_t *scope, expr_t *expr, const s_node_t *node);
 
 static bool int_load_ident(const scope_t *scope, heap_block_t *heap_block, expr_t *expr, const lexeme_t *lexeme);
 
@@ -191,6 +192,7 @@ bool int_stmt(scope_t *scope, const s_node_t *node)
   case S_PROC:
   case S_NEW:
   case S_ARRAY_INIT:
+  case S_POST_OP:
     if (!int_expr(scope, &expr, node->stmt.body))
       return false;
     break;
@@ -247,6 +249,15 @@ bool int_fn(scope_t *scope, const s_node_t *node, const scope_t *scope_class)
   
   if (!node->fn.body) {
     fn_t *fn = scope_find_fn(scope, node->fn.fn_ident->data.ident);
+    
+    if (!fn) {
+      c_error(
+        node->fn.fn_ident,
+        "bodyless function is unboud '%s'",
+        node->fn.fn_ident->data.ident);
+      return false;
+    }
+    
     fn->type = type;
     fn->param = node->fn.param_decl;
   } else {
@@ -457,6 +468,8 @@ bool int_expr(scope_t *scope, expr_t *expr, const s_node_t *node)
     return int_new(scope, expr, node);
   case S_ARRAY_INIT:
     return int_array_init(scope, expr, node);
+  case S_POST_OP:
+    return int_post_op(scope, expr, node);
   default:
     LOG_ERROR("unknown expr node_type (%i)", node->node_type);
     return false;
@@ -585,12 +598,39 @@ err_cleanup:
 }
 
 bool int_unary(scope_t *scope, expr_t *expr, const s_node_t *node)
-{
-  expr_t base;
-  switch (node->unary.op->token) {
-  default:
-    break;
+{  
+  expr_t rhs;
+  if (!int_expr(scope, &rhs, node->unary.rhs))
+    return false;
+  
+  expr->loc_base = NULL;
+  expr->loc_offset = 0;
+  
+  if (node->unary.op->token == '-') {
+    if (type_cmp(&rhs.type, &type_i32)) {
+      expr->i32 = -rhs.i32;
+      expr->type = type_i32;
+    } else if (type_cmp(&rhs.type, &type_f32)) {
+      expr->f32 = -rhs.f32;
+      expr->type = type_f32;
+    } else
+      goto err_no_op;
+  } else if (node->unary.op->token == '!') {
+    if (type_cmp(&rhs.type, &type_i32)) {
+      expr->i32 = !rhs.i32;
+      expr->type = type_i32;
+    } else
+      goto err_no_op;
+  } else {
+err_no_op:
+    c_error(
+      node->unary.op,
+      "unknown operand type for '%t': '%z'",
+      node->unary.op->token,
+      &rhs.type);
+    return false;
   }
+  
   return true;
 }
 
@@ -627,6 +667,24 @@ bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node)
     case '>':
       expr->i32 = lhs.i32 > rhs.i32;
       break;
+    case TK_LE:
+      expr->i32 = lhs.i32 <= rhs.i32;
+      break;
+    case TK_GE:
+      expr->i32 = lhs.i32 >= rhs.i32;
+      break;
+    case TK_EQ:
+      expr->i32 = lhs.i32 == rhs.i32;
+      break;
+    case TK_NE:
+      expr->i32 = lhs.i32 != rhs.i32;
+      break;
+    case TK_AND:
+      expr->i32 = lhs.i32 && rhs.i32;
+      break;
+    case TK_OR:
+      expr->i32 = lhs.i32 || rhs.i32;
+      break;
     case '=':
       if (!expr_lvalue(&lhs)) {
         c_error(node->binop.op, "lvalue required as left operand of assignment");
@@ -657,12 +715,28 @@ bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node)
       expr->f32 = lhs.f32 / rhs.f32;
       break;
     case '<':
-      expr->type = type_i32;
       expr->i32 = lhs.f32 < rhs.f32;
+      expr->type = type_i32;
       break;
     case '>':
-      expr->type = type_i32;
       expr->i32 = lhs.f32 > rhs.f32;
+      expr->type = type_i32;
+      break;
+    case TK_GE:
+      expr->f32 = lhs.f32 >= rhs.f32;
+      expr->type = type_i32;
+      break;
+    case TK_LE:
+      expr->f32 = lhs.f32 <= rhs.f32;
+      expr->type = type_i32;
+      break;
+    case TK_EQ:
+      expr->f32 = lhs.f32 == rhs.f32;
+      expr->type = type_i32;
+      break;
+    case TK_NE:
+      expr->f32 = lhs.f32 != rhs.f32;
+      expr->type = type_i32;
       break;
     case '=':
       if (!expr_lvalue(&lhs)) {
@@ -698,9 +772,10 @@ bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node)
 err_no_op:
     c_error(
       node->binop.op,
-      "unknown operand type for '%t': '%z' and '%z'",
+      "unknown operand type for '%t': '%z' and '%z' '%h'",
       node->binop.op->token,
-      &lhs.type, &rhs.type);
+      &lhs.type, &rhs.type,
+      node);
     return false;
   }
   
@@ -835,6 +910,59 @@ bool int_array_init(scope_t *scope, expr_t *expr, const s_node_t *node)
   expr->align_of = (size_t) heap_alloc(size.i32 * type_size(&type));
   expr->loc_base = NULL;
   expr->loc_offset = 0;
+  
+  return true;
+}
+
+bool int_post_op(scope_t *scope, expr_t *expr, const s_node_t *node)
+{
+  expr_t lhs;
+  if (!int_expr(scope, &lhs, node->post_op.lhs))
+    return false;
+  
+  expr->loc_base = NULL;
+  expr->loc_offset = 0;
+  
+  if (node->post_op.op->token == TK_INC) {
+    if (!expr_lvalue(&lhs)) {
+      c_error(node->post_op.op, "lvalue required as left operand '%t'", node->post_op.op->token);
+      return false;
+    }
+    
+    *expr = lhs;
+    expr->loc_base = NULL;
+    expr->loc_offset = 0;
+    
+    if (type_cmp(&lhs.type, &type_i32))
+      lhs.i32 = lhs.i32 + 1;
+    else if (type_cmp(&lhs.type, &type_f32))
+      lhs.f32 = lhs.f32 + 1.0;
+    
+    mem_assign(lhs.loc_base, lhs.loc_offset, &type_i32, &lhs);
+  } else if (node->post_op.op->token == TK_DEC) {
+    if (!expr_lvalue(&lhs)) {
+      c_error(node->post_op.op, "lvalue required as left operand '%t'", node->post_op.op->token);
+      return false;
+    }
+    
+    *expr = lhs;
+    expr->loc_base = NULL;
+    expr->loc_offset = 0;
+    
+    if (type_cmp(&lhs.type, &type_i32))
+      lhs.i32 = lhs.i32 - 1;
+    else if (type_cmp(&lhs.type, &type_f32))
+      lhs.f32 = lhs.f32 - 1.0;
+    
+    mem_assign(lhs.loc_base, lhs.loc_offset, &type_i32, &lhs);
+  } else {
+    c_error(
+      node->post_op.op,
+      "unknown postfix operand type for '%t': '%z'",
+      node->post_op.op->token,
+      &lhs.type);
+    return false;
+  }
   
   return true;
 }

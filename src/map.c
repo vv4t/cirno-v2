@@ -64,6 +64,8 @@ void map_flush(map_t *map, void (*fn_free)(void *block))
     
     entry = next;
   }
+  
+  map->start = NULL;
 }
 
 bool map_put(map_t *map, const char *key, void *value)

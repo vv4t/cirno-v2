@@ -13,7 +13,9 @@ typedef struct {
 
 static op_set_t op_set_table[] = {
   { '=' },
-  { '<', '>' },
+  { TK_OR },
+  { TK_AND },
+  { '<', '>', TK_GE, TK_LE },
   { '+', '-' },
   { '*', '/' }
 };
@@ -75,6 +77,7 @@ static s_node_t *make_ret_stmt(const lexeme_t *ret_token, s_node_t *body);
 static s_node_t *make_proc(s_node_t *base, s_node_t *arg, const lexeme_t *left_bracket);
 static s_node_t *make_arg(s_node_t *body, s_node_t *next);
 static s_node_t *make_array_init(const lexeme_t *array_init, s_node_t *type, s_node_t *size);
+static s_node_t *make_post_op(s_node_t *lhs, const lexeme_t *op);
 static s_node_t *make_node(s_node_type_t type);
 
 s_node_t *s_parse(lex_t *lex)
@@ -342,8 +345,10 @@ static s_node_t *s_binop(lex_t *lex, int op_set)
     const lexeme_t *op = NULL;
     while ((op = lex_match(lex, op_set_table[op_set].op[i]))) {
       s_node_t *rhs = s_binop(lex, op_set + 1);
-      if (!rhs)
+      if (!rhs) {
         c_error(lex->lexeme, "expected 'expression' before '%l'", lex->lexeme);
+        s_err = true;
+      }
       
       lhs = make_binop(lhs, op, rhs);
     }
@@ -354,6 +359,11 @@ static s_node_t *s_binop(lex_t *lex, int op_set)
 
 static s_node_t *s_unary(lex_t *lex)
 {
+  const lexeme_t *op = NULL;
+  if ((op = lex_match(lex, '-')))
+    return make_unary(op, s_unary(lex));
+  else if ((op = lex_match(lex, '!')))
+    return make_unary(op, s_unary(lex));
   return s_postfix(lex);
 }
 
@@ -370,6 +380,10 @@ static s_node_t *s_postfix(lex_t *lex)
     } else if (lex_match(lex, '.')) {
       const lexeme_t *child_ident = s_expect(lex, TK_IDENTIFIER);
       base = make_direct(base, child_ident);
+    } else if ((lexeme = lex_match(lex, TK_INC))) {
+      base = make_post_op(base, lexeme);
+    } else if ((lexeme =lex_match(lex, TK_DEC))) {
+      base = make_post_op(base, lexeme);
     } else if ((lexeme = lex_match(lex, '('))) {
       s_node_t *arg = s_arg(lex);
       s_expect(lex, ')');
@@ -550,6 +564,14 @@ static s_node_t *make_type(const lexeme_t *spec, const lexeme_t *left_bracket, c
   return node;
 }
 
+static s_node_t *make_post_op(s_node_t *lhs, const lexeme_t *op)
+{
+  s_node_t *node = make_node(S_POST_OP);
+  node->post_op.op = op;
+  node->post_op.lhs = lhs;
+  return node;
+}
+
 static s_node_t *make_unary(const lexeme_t *op, s_node_t *rhs)
 {
   s_node_t *node = make_node(S_UNARY);
@@ -724,6 +746,10 @@ static void s_print_node_R(const s_node_t *node, int pad)
     s_print_node_R(node->array_init.type, pad + 2);
     s_print_node_R(node->array_init.size, pad + 2);
     break;
+  case S_POST_OP:
+    LOG_DEBUG("%*sS_POST_OP", pad, "");
+    s_print_node_R(node->post_op.lhs, pad + 2);
+    break;
   default:
     LOG_ERROR("unknown s_node_t (%i)", node->node_type);
     break;
@@ -806,6 +832,9 @@ void s_free(s_node_t *node)
   case S_ARRAY_INIT:
     s_free(node->array_init.type);
     s_free(node->array_init.size);
+    break;
+  case S_POST_OP:
+    s_free(node->post_op.lhs);
     break;
   default:
     LOG_ERROR("unknown s_node_t (%i)", node->node_type);

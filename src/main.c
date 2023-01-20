@@ -65,22 +65,7 @@ int main(int argc, char *argv[])
   
   if (!s_error()) {
     int_start();
-    int_bind("test", test_f);
     int_run(node);
-    
-    expr_t arg_list[] = {
-      {
-        .type = type_i32,
-        .loc_base = NULL,
-        .loc_offset = 0,
-        .i32 = 3
-      },
-    };
-    
-    int num_arg_list = sizeof(arg_list) / sizeof(expr_t);
-    
-    int_call("hi", arg_list, num_arg_list);
-    
     int_stop();
   }
   
