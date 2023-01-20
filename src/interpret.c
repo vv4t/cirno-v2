@@ -49,18 +49,105 @@ static bool int_array_init(scope_t *scope, expr_t *expr, const s_node_t *node);
 
 static bool int_load_ident(const scope_t *scope, heap_block_t *heap_block, expr_t *expr, const lexeme_t *lexeme);
 
-bool interpret(const s_node_t *node)
+void int_start()
 {
   scope_new(&scope_global, NULL, &type_none, NULL, NULL);
+}
+
+bool int_run(const s_node_t *node)
+{
+  const s_node_t *head = node;
   
-  bool err = int_body(&scope_global, node);
+  while (head) {
+    if (!int_stmt(&scope_global, head)) {
+      scope_free(&scope_global);
+      scope_global.scope_child = NULL;
+      heap_clean();
+      return false;
+    }
+    
+    head = head->stmt.next;
+  }
   
+  return true;
+}
+
+void int_stop()
+{
   heap_clean();
   
   scope_free(&scope_global);
   scope_global.scope_child = NULL;
+}
+
+bool int_call(const char *ident, expr_t *arg_list, int num_arg_list)
+{
+  fn_t *fn = scope_find_fn(&scope_global, ident);
   
-  return err;
+  scope_t new_scope;
+  scope_new(&new_scope, NULL, &fn->type, &scope_global, fn->scope_parent);
+  new_scope.size += scope_global.size;
+  
+  int arg_num = 0;
+  s_node_t *head = fn->param;
+  while (head) {
+    if (arg_num >= num_arg_list) {
+      printf("int_call: error: %s(): too few arguments\n", ident);
+      return false;
+    }
+    
+    type_t type;
+    if (!int_type(&new_scope, &type, head->param_decl.type))
+      return false;
+    
+    if (!type_cmp(&type, &arg_list[arg_num].type))
+      return false;
+    
+    if (scope_find_var(&new_scope, head->param_decl.ident->data.ident)) {
+      c_error(
+        head->param_decl.ident,
+        "redefinition of param '%s'",
+        head->param_decl.ident->data.ident);
+      return false;
+    }
+    
+    var_t *var = scope_add_var(&new_scope, &type, head->param_decl.ident->data.ident);
+    mem_assign(mem_stack, var->loc, &var->type, &arg_list[arg_num]);
+    
+    head = head->param_decl.next;
+    arg_num++;
+  }
+  
+  if (arg_num < num_arg_list) {
+    LOG_ERROR("%s(): too many arguments", ident);
+    return false;
+  }
+  
+  int_body(&new_scope, fn->node);
+  
+  scope_free(&new_scope);
+}
+
+void int_bind(const char *ident, xaction_t xaction)
+{
+  scope_add_fn(
+    &scope_global,
+    &type_none,
+    NULL,
+    NULL,
+    xaction,
+    NULL,
+    ident);
+}
+
+bool int_var_load(const scope_t *scope, expr_t *expr, char *ident)
+{
+  var_t *var = scope_find_var(scope, ident);
+  if (!var)
+    return false;
+  
+  mem_load(mem_stack, var->loc, &var->type, expr);
+  return true;
 }
 
 bool int_body(scope_t *scope, const s_node_t *node)
@@ -145,9 +232,11 @@ bool int_stmt(scope_t *scope, const s_node_t *node)
 
 bool int_fn(scope_t *scope, const s_node_t *node, const scope_t *scope_class)
 {
-  if (scope_find_fn(scope, node->fn.fn_ident->data.ident)) {
-    c_error(node->fn.fn_ident, "redefinition of function '%s'", node->fn.fn_ident->data.ident);
-    return false;
+  if (node->fn.body) {
+    if (scope_find_fn(scope, node->fn.fn_ident->data.ident)) {
+      c_error(node->fn.fn_ident, "redefinition of function '%s'", node->fn.fn_ident->data.ident);
+      return false;
+    }
   }
   
   type_t type = type_none;
@@ -156,13 +245,20 @@ bool int_fn(scope_t *scope, const s_node_t *node, const scope_t *scope_class)
       return false;
   }
   
-  scope_add_fn(
-    scope,
-    &type,
-    node->fn.param_decl,
-    node->fn.body,
-    scope_class,
-    node->fn.fn_ident->data.ident);
+  if (!node->fn.body) {
+    fn_t *fn = scope_find_fn(scope, node->fn.fn_ident->data.ident);
+    fn->type = type;
+    fn->param = node->fn.param_decl;
+  } else {
+    scope_add_fn(
+      scope,
+      &type,
+      node->fn.param_decl,
+      node->fn.body,
+      NULL,
+      scope_class,
+      node->fn.fn_ident->data.ident);
+  }
   
   return true;
 }
@@ -389,6 +485,13 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
     return false;
   }
   
+  if (!fn->node && !fn->xaction) {
+    c_error(
+      node->proc.left_bracket,
+      "attempt to call function without body");
+    return false;
+  }
+  
   scope_t new_scope;
   
   if (fn->scope_class) {
@@ -463,11 +566,15 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
     return false;
   }
   
-  if (!int_body(&new_scope, fn->node)) {
+  if (fn->node) {
+    if (!int_body(&new_scope, fn->node)) {
 err_cleanup:
-    scope_free(&new_scope);
-    scope->scope_child = NULL;
-    return false;
+      scope_free(&new_scope);
+      scope->scope_child = NULL;
+      return false;
+    }
+  } else {
+    fn->xaction(&new_scope.ret_value, &new_scope);
   }
   
   *expr = new_scope.ret_value;

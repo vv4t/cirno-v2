@@ -58,10 +58,13 @@ typedef struct {
   int     loc;
 } var_t;
 
+typedef bool (*xaction_t)(expr_t *ret_value, scope_t *scope_args);
+
 typedef struct {
   s_node_t      *node;
   s_node_t      *param;
   type_t        type;
+  xaction_t     xaction;
   const scope_t *scope_parent;
   const scope_t *scope_class;
 } fn_t;
@@ -80,14 +83,29 @@ extern int  type_size_base(const type_t *type);
 
 extern bool expr_lvalue(const expr_t *expr);
 
-extern void     scope_new(scope_t *scope, const char *ident, const type_t *ret_type, scope_t *scope_parent, const scope_t *scope_find);
+extern void     scope_new(
+  scope_t       *scope,
+  const char    *ident,
+  const type_t  *ret_type,
+  scope_t       *scope_parent,
+  const scope_t *scope_find);
+
 extern void     scope_free(scope_t *scope);
 
 extern var_t    *scope_add_var(scope_t *scope, const type_t *type, const char *ident);
 extern var_t    *scope_find_var(const scope_t *scope, const char *ident);
 extern scope_t  *scope_add_class(scope_t *scope, const char *ident, const scope_t *class_data);
 extern scope_t  *scope_find_class(const scope_t *scope, const char *ident);
-extern fn_t     *scope_add_fn(scope_t *scope, const type_t *type, s_node_t *param, s_node_t *node, const scope_t *scope_class, const char *ident);
+
+extern fn_t     *scope_add_fn(
+  scope_t       *scope,
+  const type_t  *type,
+  s_node_t      *param,
+  s_node_t      *node,
+  xaction_t     xaction,
+  const scope_t *scope_class,
+  const char    *ident);
+
 extern fn_t     *scope_find_fn(const scope_t *scope, const char *ident);
 
 #endif

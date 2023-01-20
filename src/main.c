@@ -10,6 +10,17 @@
 #include <stdbool.h>
 #include <unistd.h>
 
+bool test_f(expr_t *ret_value, scope_t *scope_args)
+{
+  expr_t a;
+  int_var_load(scope_args, &a, "a");
+  
+  ret_value->type = type_i32;
+  ret_value->i32 = a.i32 + 4;
+  ret_value->loc_base = NULL;
+  ret_value->loc_offset = 0;
+}
+
 int main(int argc, char *argv[])
 {
   bool flag_debug = false;
@@ -52,8 +63,26 @@ int main(int argc, char *argv[])
   
   s_node_t *node = s_parse(&lex);
   
-  if (!s_error())
-    interpret(node);
+  if (!s_error()) {
+    int_start();
+    int_bind("test", test_f);
+    int_run(node);
+    
+    expr_t arg_list[] = {
+      {
+        .type = type_i32,
+        .loc_base = NULL,
+        .loc_offset = 0,
+        .i32 = 3
+      },
+    };
+    
+    int num_arg_list = sizeof(arg_list) / sizeof(expr_t);
+    
+    int_call("hi", arg_list, num_arg_list);
+    
+    int_stop();
+  }
   
   lex_free(&lex);
   s_free(node);

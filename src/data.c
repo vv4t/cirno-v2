@@ -163,10 +163,18 @@ scope_t *scope_find_class(const scope_t *scope, const char *ident)
   return class;
 }
 
-fn_t *scope_add_fn(scope_t *scope, const type_t *type, s_node_t *param, s_node_t *node, const scope_t *scope_class, const char *ident)
+fn_t *scope_add_fn(
+  scope_t       *scope,
+  const type_t  *type,
+  s_node_t      *param,
+  s_node_t      *node,
+  xaction_t     xaction,
+  const scope_t *scope_class,
+  const char    *ident)
 {
   fn_t *fn = ZONE_ALLOC(sizeof(fn_t));
   fn->node = node;
+  fn->xaction = xaction;
   fn->param = param;
   fn->type = *type;
   fn->scope_parent = scope;

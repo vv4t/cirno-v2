@@ -1,2 +1,9 @@
-i32[] a;
-print a[0];
+fn test(i32 a) : i32;
+
+i32 d = 0;
+
+fn hi(i32 a)
+{
+  d = d + 1;
+  print d, test(3);
+}

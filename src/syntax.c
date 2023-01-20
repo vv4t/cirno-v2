@@ -141,7 +141,9 @@ static s_node_t *s_fn(lex_t *lex)
   if (lex_match(lex, ':'))
     type = s_expect_rule(lex, R_TYPE);
   
-  s_node_t *body = s_expect_rule(lex, R_BODY);
+  s_node_t *body = NULL;
+  if (!lex_match(lex, ';'))
+    body = s_expect_rule(lex, R_BODY);
   
   return make_fn(fn_ident, param_decl, type, body);
 }
