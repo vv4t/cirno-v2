@@ -17,6 +17,9 @@ static heap_block_t  *heap_block_list = NULL;
 static heap_block_t  *heap_alloc(int size);
 static void         heap_clean();
 static void         heap_clean_R(scope_t *scope);
+static void         heap_clean_class(heap_block_t *heap_block, const scope_t *class);
+static void         heap_clean_array_class(heap_block_t *heap_block, const scope_t *class);
+static void         heap_clean_var(var_t *var);
 
 static scope_t  scope_global;
 
@@ -75,10 +78,10 @@ bool int_run(const s_node_t *node)
 
 void int_stop()
 {
-  heap_clean();
-  
   scope_free(&scope_global);
   scope_global.scope_child = NULL;
+  
+  heap_clean();
 }
 
 bool int_call(const char *ident, expr_t *arg_list, int num_arg_list)
@@ -644,139 +647,165 @@ bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node)
   if (!int_expr(scope, &rhs, node->binop.rhs))
     return false;
   
-  expr->loc_base = NULL;
-  expr->loc_offset = 0;
-  if (type_cmp(&lhs.type, &type_i32) && type_cmp(&rhs.type, &type_i32)) {
-    expr->type = type_i32;
-    switch (node->binop.op->token) {
-    case '+':
-      expr->i32 = lhs.i32 + rhs.i32;
-      break;
-    case '-':
-      expr->i32 = lhs.i32 - rhs.i32;
-      break;
-    case '*':
-      expr->i32 = lhs.i32 * rhs.i32;
-      break;
-    case '/':
-      expr->i32 = lhs.i32 / rhs.i32;
-      break;
-    case '<':
-      expr->i32 = lhs.i32 < rhs.i32;
-      break;
-    case '>':
-      expr->i32 = lhs.i32 > rhs.i32;
-      break;
-    case TK_LE:
-      expr->i32 = lhs.i32 <= rhs.i32;
-      break;
-    case TK_GE:
-      expr->i32 = lhs.i32 >= rhs.i32;
-      break;
-    case TK_EQ:
-      expr->i32 = lhs.i32 == rhs.i32;
-      break;
-    case TK_NE:
-      expr->i32 = lhs.i32 != rhs.i32;
-      break;
-    case TK_AND:
-      expr->i32 = lhs.i32 && rhs.i32;
-      break;
-    case TK_OR:
-      expr->i32 = lhs.i32 || rhs.i32;
-      break;
-    case '=':
-      if (!expr_lvalue(&lhs)) {
-        c_error(node->binop.op, "lvalue required as left operand of assignment");
-        return false;
-      }
-      
-      mem_assign(lhs.loc_base, lhs.loc_offset, &type_i32, &rhs);
-      *expr = lhs;
-      expr->i32 = rhs.i32;
-      
-      break;
-    default:
-      goto err_no_op;
+  if (node->binop.op->token == '='
+  || node->binop.op->token >= TK_ADD_ASSIGN
+  && node->binop.op->token <= TK_DIV_ASSIGN) {
+    if (!expr_lvalue(&lhs)) {
+      c_error(node->binop.op, "lvalue required as left operand of assignment");
+      return false;
     }
-  } else if (type_cmp(&lhs.type, &type_f32) && type_cmp(&rhs.type, &type_f32)) {
-    expr->type = type_f32;
-    switch (node->binop.op->token) {
-    case '+':
-      expr->f32 = lhs.f32 + rhs.f32;
-      break;
-    case '-':
-      expr->f32 = lhs.f32 - rhs.f32;
-      break;
-    case '*':
-      expr->f32 = lhs.f32 * rhs.f32;
-      break;
-    case '/':
-      expr->f32 = lhs.f32 / rhs.f32;
-      break;
-    case '<':
-      expr->i32 = lhs.f32 < rhs.f32;
-      expr->type = type_i32;
-      break;
-    case '>':
-      expr->i32 = lhs.f32 > rhs.f32;
-      expr->type = type_i32;
-      break;
-    case TK_GE:
-      expr->f32 = lhs.f32 >= rhs.f32;
-      expr->type = type_i32;
-      break;
-    case TK_LE:
-      expr->f32 = lhs.f32 <= rhs.f32;
-      expr->type = type_i32;
-      break;
-    case TK_EQ:
-      expr->f32 = lhs.f32 == rhs.f32;
-      expr->type = type_i32;
-      break;
-    case TK_NE:
-      expr->f32 = lhs.f32 != rhs.f32;
-      expr->type = type_i32;
-      break;
-    case '=':
-      if (!expr_lvalue(&lhs)) {
-        c_error(node->binop.op, "lvalue required as left operand of assignment");
-        return false;
+    
+    if (type_cmp(&lhs.type, &type_i32) && expr_cast(&rhs, &type_i32)) {
+      switch (node->binop.op->token) {
+      case '=':
+        lhs.i32 = rhs.i32;
+        break;
+      case TK_ADD_ASSIGN:
+        lhs.i32 += rhs.i32;
+        break;
+      case TK_SUB_ASSIGN:
+        lhs.i32 -= rhs.i32;
+        break;
+      case TK_MUL_ASSIGN:
+        lhs.i32 *= rhs.i32;
+        break;
+      case TK_DIV_ASSIGN:
+        lhs.i32 /= rhs.i32;
+        break;
+      default:
+        goto err_no_op;
       }
-      
-      mem_assign(lhs.loc_base, lhs.loc_offset, &type_f32, &rhs);
-      *expr = lhs;
-      expr->f32 = rhs.f32;
-      
-      break;
-    default:
-      goto err_no_op;
-    }
-  } else if (type_class(&lhs.type)
-  && type_class(&rhs.type)
-  && type_cmp(&lhs.type, &rhs.type)) {
-    switch (node->binop.op->token) {
-    case '=':
-      if (!expr_lvalue(&lhs)) {
-        c_error(node->binop.op, "lvalue required as left operand of assignment");
-        return false;
+    } else if (type_cmp(&lhs.type, &type_f32) && expr_cast(&rhs, &type_f32)) {
+      switch (node->binop.op->token) {
+      case '=':
+        lhs.f32 = rhs.f32;
+        break;
+      case TK_ADD_ASSIGN:
+        lhs.f32 += rhs.f32;
+        break;
+      case TK_SUB_ASSIGN:
+        lhs.f32 -= rhs.f32;
+        break;
+      case TK_MUL_ASSIGN:
+        lhs.f32 *= rhs.f32;
+        break;
+      case TK_DIV_ASSIGN:
+        lhs.f32 /= rhs.f32;
+        break;
+      default:
+        goto err_no_op;
       }
-      
-      mem_assign(lhs.loc_base, lhs.loc_offset, &rhs.type, &rhs);
-      *expr = lhs;
-      expr->align_of = rhs.align_of;
-      
-      break;
+    } else if ((type_class(&lhs.type) && type_class(&rhs.type))
+    || (type_array(&lhs.type) && type_array(&rhs.type))
+    && type_cmp(&lhs.type, &rhs.type)) {
+      switch (node->binop.op->token) {
+      case '=':
+        lhs.align_of = rhs.align_of;
+        break;
+      default:
+        goto err_no_op;
+      }
     }
+    
+    *expr = lhs;
+    mem_assign(lhs.loc_base, lhs.loc_offset, &type_i32, &rhs);
   } else {
-err_no_op:
-    c_error(
-      node->binop.op,
-      "unknown operand type for '%t': '%z' and '%z' '%h'",
-      node->binop.op->token,
-      &lhs.type, &rhs.type,
-      node);
-    return false;
+    expr->loc_base = NULL;
+    expr->loc_offset = 0;
+    if (expr_cast(&lhs, &type_i32) && expr_cast(&rhs, &type_i32)) {
+      expr->type = type_i32;
+      switch (node->binop.op->token) {
+      case '+':
+        expr->i32 = lhs.i32 + rhs.i32;
+        break;
+      case '-':
+        expr->i32 = lhs.i32 - rhs.i32;
+        break;
+      case '*':
+        expr->i32 = lhs.i32 * rhs.i32;
+        break;
+      case '/':
+        expr->i32 = lhs.i32 / rhs.i32;
+        break;
+      case '<':
+        expr->i32 = lhs.i32 < rhs.i32;
+        break;
+      case '>':
+        expr->i32 = lhs.i32 > rhs.i32;
+        break;
+      case TK_LE:
+        expr->i32 = lhs.i32 <= rhs.i32;
+        break;
+      case TK_GE:
+        expr->i32 = lhs.i32 >= rhs.i32;
+        break;
+      case TK_EQ:
+        expr->i32 = lhs.i32 == rhs.i32;
+        break;
+      case TK_NE:
+        expr->i32 = lhs.i32 != rhs.i32;
+        break;
+      case TK_AND:
+        expr->i32 = lhs.i32 && rhs.i32;
+        break;
+      case TK_OR:
+        expr->i32 = lhs.i32 || rhs.i32;
+        break;
+      default:
+        goto err_no_op;
+      }
+    } else if (expr_cast(&lhs, &type_f32) && expr_cast(&rhs, &type_f32)) {
+      expr->type = type_f32;
+      switch (node->binop.op->token) {
+      case '+':
+        expr->f32 = lhs.f32 + rhs.f32;
+        break;
+      case '-':
+        expr->f32 = lhs.f32 - rhs.f32;
+        break;
+      case '*':
+        expr->f32 = lhs.f32 * rhs.f32;
+        break;
+      case '/':
+        expr->f32 = lhs.f32 / rhs.f32;
+        break;
+      case '<':
+        expr->i32 = lhs.f32 < rhs.f32;
+        expr->type = type_i32;
+        break;
+      case '>':
+        expr->i32 = lhs.f32 > rhs.f32;
+        expr->type = type_i32;
+        break;
+      case TK_GE:
+        expr->f32 = lhs.f32 >= rhs.f32;
+        expr->type = type_i32;
+        break;
+      case TK_LE:
+        expr->f32 = lhs.f32 <= rhs.f32;
+        expr->type = type_i32;
+        break;
+      case TK_EQ:
+        expr->f32 = lhs.f32 == rhs.f32;
+        expr->type = type_i32;
+        break;
+      case TK_NE:
+        expr->f32 = lhs.f32 != rhs.f32;
+        expr->type = type_i32;
+        break;
+      default:
+        goto err_no_op;
+      }
+    } else {
+  err_no_op:
+      c_error(
+        node->binop.op,
+        "unknown operand type for '%t': '%z' and '%z' '%h'",
+        node->binop.op->token,
+        &lhs.type, &rhs.type,
+        node);
+      return false;
+    }
   }
   
   return true;
@@ -805,6 +834,11 @@ bool int_direct(scope_t *scope, expr_t *expr, const s_node_t *node)
   }
   
   heap_block_t *heap_block = (heap_block_t*) base.align_of;
+  if (!heap_block->use) {
+    LOG_ERROR("use of deallocated block");
+    return false;
+  }
+  
   if (!int_load_ident(base.type.class, heap_block, expr, node->direct.child_ident)) {
     c_error(
       node->direct.child_ident,
@@ -844,6 +878,12 @@ bool int_index(scope_t *scope, expr_t *expr, const s_node_t *node)
   int offset = index.i32 * type_size_base(&base.type);
   
   heap_block_t *heap_block = (heap_block_t*) base.align_of;
+  
+  if (!heap_block->use) {
+    LOG_ERROR("use of deallocated block");
+    return false;
+  }
+  
   if (!heap_block) {
     c_error(
       node->index.left_bracket,
@@ -1133,31 +1173,53 @@ static void heap_clean_R(scope_t *scope)
   entry_t *entry = scope->map_var.start;
   while (entry) {
     var_t *var = (var_t*) entry->value;
-    
-    if (var->type.spec == SPEC_CLASS || var->type.arr) {
-      expr_t expr;
-      mem_load(mem_stack, var->loc, &var->type, &expr);
-      
-      heap_block_t *heap_block = (heap_block_t*) expr.align_of;
-      
-      if (!heap_block)
-        continue;
-      
-      heap_block->use = true;
-      
-      if (var->type.spec == SPEC_CLASS) {
-        heap_block_t **arr_class = (heap_block_t**) heap_block->block;
-        int num_class = heap_block->size / sizeof(size_t);
-        
-        for (int i = 0; i < num_class; i++) {
-          if (arr_class[i])
-            arr_class[i]->use = true;
-        }
-      }
-    }
-    
+    heap_clean_var(var);
     entry = entry->s_next;
   }
   
   heap_clean_R(scope->scope_child);
+}
+
+static void heap_clean_array_class(heap_block_t *heap_block, const scope_t *class)
+{
+  heap_block_t **array_class = (heap_block_t**) heap_block->block;
+  int num_class = heap_block->size / sizeof(size_t);
+
+  for (int i = 0; i < num_class; i++) {
+    if (array_class[i]) {
+      array_class[i]->use = true;
+      heap_clean_class(array_class[i], class);
+    }
+  }
+}
+
+static void heap_clean_class(heap_block_t *heap_block, const scope_t *class)
+{
+  entry_t *entry = class->map_var.start;
+  
+  while (entry) {
+    heap_clean_var((var_t*) entry->value);
+    entry = entry->s_next;
+  }
+}
+
+static void heap_clean_var(var_t *var)
+{
+  if (var->type.spec == SPEC_CLASS || var->type.arr) {
+    expr_t expr;
+    mem_load(mem_stack, var->loc, &var->type, &expr);
+    
+    heap_block_t *heap_block = (heap_block_t*) expr.align_of;
+    
+    if (!heap_block)
+      return;
+    
+    heap_block->use = true;
+    if (var->type.spec == SPEC_CLASS) {
+      if (var->type.arr)
+        heap_clean_array_class(heap_block, var->type.class);
+      else
+        heap_clean_class(heap_block, var->type.class);
+    }
+  }
 }

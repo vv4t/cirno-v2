@@ -30,6 +30,10 @@ typedef enum {
   TK_NE,
   TK_AND,
   TK_OR,
+  TK_ADD_ASSIGN,
+  TK_SUB_ASSIGN,
+  TK_MUL_ASSIGN,
+  TK_DIV_ASSIGN,
   TK_EOF
 } token_t;
 

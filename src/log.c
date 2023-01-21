@@ -224,6 +224,10 @@ static void token_print(token_t token)
     "!=",             // TK_NE
     "&&",             // TK_AND
     "||",             // TK_OR
+    "+=",             // TK_ADD_ASSIGN
+    "-=",             // TK_SUB_ASSIGN
+    "*=",             // TK_MUL_ASSIGN
+    "/=",             // TK_DIV_ASSIGN
     "EOF"             // TK_EOF
   };
   

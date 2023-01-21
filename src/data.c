@@ -3,7 +3,7 @@
 #include "zone.h"
 #include <stdio.h>
 
-type_t type_none = {0};
+type_t type_none    = {0};
 type_t type_i32     = { .spec = SPEC_I32,     .arr = false, .class = NULL };
 type_t type_f32     = { .spec = SPEC_F32,     .arr = false, .class = NULL };
 type_t type_string  = { .spec = SPEC_STRING,  .arr = false, .class = NULL };
@@ -56,6 +56,24 @@ int type_size_base(const type_t *type)
     return 8;
   }
 }
+
+bool expr_cast(expr_t *expr, const type_t *type)
+{
+  if (type_cmp(&expr->type, type))
+    return true;
+  
+  if (type_cmp(&expr->type, &type_i32) && type_cmp(type, &type_f32)) {
+    expr->type = type_i32;
+    expr->f32 = (float) expr->i32;
+  } else if (type_cmp(&expr->type, &type_f32) && type_cmp(type, &type_i32)) {
+    expr->type = type_f32;
+    expr->i32 = (int) expr->f32;
+  } else
+    return false;
+  
+  return true;
+}
+
 
 bool expr_lvalue(const expr_t *expr)
 {

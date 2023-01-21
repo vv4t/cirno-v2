@@ -81,6 +81,7 @@ extern bool type_array(const type_t *type);
 extern int  type_size(const type_t *type);
 extern int  type_size_base(const type_t *type);
 
+extern bool expr_cast(expr_t *expr, const type_t *type);
 extern bool expr_lvalue(const expr_t *expr);
 
 extern void     scope_new(

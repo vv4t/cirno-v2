@@ -12,7 +12,7 @@ typedef struct {
 } op_set_t;
 
 static op_set_t op_set_table[] = {
-  { '=' },
+  { '=', TK_ADD_ASSIGN, TK_SUB_ASSIGN, TK_MUL_ASSIGN, TK_DIV_ASSIGN },
   { TK_OR },
   { TK_AND },
   { '<', '>', TK_GE, TK_LE },
