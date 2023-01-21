@@ -7,7 +7,8 @@
 #include <string.h>
 
 typedef struct {
-  const char  *file;
+  char        *file;
+  int         file_size;
   const char  *src;
   const char  *c;
   int         line;
@@ -83,9 +84,14 @@ static lexeme_t *match_const_integer(lex_file_t *lex);
 static lexeme_t *match_string_literal(lex_file_t *lex);
 static lexeme_t *match_word(lex_file_t *lex);
 static lexeme_t *match_op(lex_file_t *lex);
+static lexeme_t *match_pre_proc(lex_file_t *lex);
 static void     token_print(token_t token);
 static void     lexeme_print(const lexeme_t *lexeme);
 static void     lex_printf(const lexeme_t *lexeme, const char *fmt, va_list args);
+
+
+static void lexeme_free(lexeme_t *lexeme);
+static char *filename(lex_file_t *lex);
 
 bool lex_parse(lex_t *lex, const char *src)
 {
@@ -102,8 +108,14 @@ bool lex_parse(lex_t *lex, const char *src)
   buffer[size] = 0;
   fclose(fp);
   
+  int heap_file_len = strlen(src);
+  char *heap_file = ZONE_ALLOC(heap_file_len + 1);
+  memcpy(heap_file, src, heap_file_len);
+  heap_file[heap_file_len] = 0;
+  
   lex_file_t lex_file = {
-    .file = src,
+    .file = heap_file,
+    .file_size = heap_file_len,
     .src = buffer,
     .c = buffer,
     .line = 1
@@ -113,6 +125,8 @@ bool lex_parse(lex_t *lex, const char *src)
   
   while (*lex_file.c) {
     lexeme_t *lexeme = match_const_integer(&lex_file);
+    if (!lexeme)
+      lexeme = match_pre_proc(&lex_file);
     if (!lexeme)
       lexeme = match_string_literal(&lex_file);
     if (!lexeme)
@@ -135,44 +149,57 @@ bool lex_parse(lex_t *lex, const char *src)
       }
     } else {
       if (head)
-        head = head->next = lexeme;
+        head->next = lexeme;
       else
         body = head = lexeme;
+      
+      while (head->next) {
+        if (head->next->token == TK_EOF) {
+          lexeme_free(head->next);
+          head->next = NULL;
+        } else
+          head = head->next;
+      }
     }
   }
   
   head->next = make_lexeme(TK_EOF, &lex_file);
   
   *lex = (lex_t) {
-    .src = src,
-    .buffer = buffer,
+    .file = lex_file.file,
     .lexeme = body,
-    .start = body,
-    .eof_line = lex_file.line
+    .start = body
   };
+  
+  ZONE_FREE(buffer);
   
   return true;
 }
 
+static void lexeme_free(lexeme_t *lexeme)
+{
+  switch (lexeme->token) {
+  case TK_IDENTIFIER:
+    ZONE_FREE(lexeme->data.ident);
+    break;
+  case TK_STRING_LITERAL:
+    ZONE_FREE(lexeme->data.string_literal);
+    break;
+  }
+  
+  ZONE_FREE(lexeme);
+}
+
 void lex_free(lex_t *lex)
 {
-  ZONE_FREE(lex->buffer);
-  
   lexeme_t *lexeme = lex->start;
   while (lexeme) {
-    switch (lexeme->token) {
-    case TK_IDENTIFIER:
-      ZONE_FREE(lexeme->data.ident);
-      break;
-    case TK_STRING_LITERAL:
-      ZONE_FREE(lexeme->data.string_literal);
-      break;
-    }
-    
     lexeme_t *next = lexeme->next;
-    ZONE_FREE(lexeme);
+    lexeme_free(lexeme);
     lexeme = next;
   }
+  
+  ZONE_FREE(lex->file);
 }
 
 void lex_next(lex_t *lex)
@@ -206,6 +233,87 @@ static lexeme_t *make_lexeme(token_t token, const lex_file_t *lex)
   lexeme->src = lex->file;
   lexeme->next = NULL;
   return lexeme;
+}
+
+static char *filename(lex_file_t *lex)
+{
+  if (*lex->c != '"')
+    return NULL;
+  
+  const char *str_start = lex->c + 1;
+  int str_len = 0;
+  
+  do
+    lex->c++;
+  while (*lex->c != '"' && *lex->c != 0 && *lex->c != '\n');
+  
+  if (*lex->c == 0 || *lex->c == '\n') {
+    printf("%s:%i:error: missing terminating '\"'\n", lex->file, lex->line);
+    return NULL;
+  }
+  
+  str_len = lex->c - str_start;
+  lex->c++;
+  
+  char *file = ZONE_ALLOC(str_len + 1);
+  memcpy(file, str_start, str_len);
+  file[str_len] = 0;
+  
+  char *slash = strrchr(lex->file, '/');
+  if (slash) {
+    int dir_len = slash - lex->file;
+    int total_len = dir_len + str_len;
+    char *file_dir_concat = ZONE_ALLOC(total_len);
+    memcpy(file_dir_concat, lex->file, dir_len);
+    file_dir_concat[dir_len] = '/';
+    memcpy(&file_dir_concat[dir_len + 1], file, str_len);
+    
+    ZONE_FREE(file);
+    file = file_dir_concat;
+  }
+  
+  return file;
+}
+
+static char *lex_file_add_file(lex_file_t *lex, const char *file)
+{
+  int file_len = strlen(file);
+  
+  lex->file = ZONE_REALLOC(lex->file, lex->file_size + file_len + 1);
+  char *new_file = &lex->file[lex->file_size + 1];
+  memcpy(new_file, file, file_len);
+  new_file[file_len] = 0;
+  lex->file_size += file_len;
+  
+  return new_file;
+}
+
+static lexeme_t *match_pre_proc(lex_file_t *lex)
+{
+  if (*lex->c != '#')
+    return NULL;
+  
+  if (strncmp(lex->c, "#include ", strlen("#include ")) == 0) {
+    lex->c += strlen("#include ");
+    char *file = filename(lex);
+    if (!file)
+      return NULL;
+    
+    char *new_file = lex_file_add_file(lex, file);
+    ZONE_FREE(file);
+    
+    lex_t include_file;
+    if (!lex_parse(&include_file, new_file)) {
+      printf("%s:%i:error: could not open '%s'\n", lex->file, lex->line, new_file);
+      return NULL;
+    }
+    
+    ZONE_FREE(include_file.file);
+    
+    return include_file.start;
+  }
+  
+  return NULL;
 }
 
 static lexeme_t *match_const_integer(lex_file_t *lex)

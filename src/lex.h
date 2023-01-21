@@ -52,11 +52,9 @@ typedef struct lexeme_s {
 } lexeme_t;
 
 typedef struct {
-  const char  *src;
-  char        *buffer;
+  char        *file;
   lexeme_t    *lexeme;
   lexeme_t    *start;
-  int         eof_line;
 } lex_t;
 
 extern bool           lex_parse(lex_t *lex, const char *src);

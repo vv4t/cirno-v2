@@ -35,8 +35,23 @@ void *zone_alloc(const char *src, int line, int size)
   
   num_zone_block++;
   
-  char *mem_block = block + sizeof(zone_block_t);
-  return mem_block;
+  return block + sizeof(zone_block_t);
+}
+
+void *zone_realloc(void *block, int size)
+{
+  zone_block_t *zone_block = (zone_block_t*) ((char*) block - sizeof(zone_block_t));
+  zone_block_t *zone_prev = zone_block->prev;
+  zone_block_t *zone_next = zone_block->next;
+  
+  zone_block_t *new_zone_block = realloc(zone_block, sizeof(zone_block_t) + size);
+  
+  if (zone_prev)
+    zone_prev->next = new_zone_block;
+  if (zone_next)
+    zone_next->prev = new_zone_block;
+  
+  return (char*) new_zone_block + sizeof(zone_block_t);
 }
 
 void zone_free(void *block)

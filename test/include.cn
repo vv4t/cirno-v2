@@ -1,0 +1,3 @@
+#include "sieve.cn"
+
+print "DONE";
