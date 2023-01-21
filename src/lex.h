@@ -34,6 +34,7 @@ typedef enum {
   TK_SUB_ASSIGN,
   TK_MUL_ASSIGN,
   TK_DIV_ASSIGN,
+  TK_FOR,
   TK_EOF
 } token_t;
 

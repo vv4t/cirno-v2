@@ -19,6 +19,7 @@ typedef enum {
   S_PARAM_DECL,
   S_IF_STMT,
   S_WHILE_STMT,
+  S_FOR_STMT,
   S_RET_STMT,
   S_PROC,
   S_NEW,
@@ -83,6 +84,12 @@ typedef struct s_node_s {
       struct s_node_s *cond;
       struct s_node_s *body;
     } while_stmt;
+    struct {
+      struct s_node_s *decl;
+      struct s_node_s *cond;
+      struct s_node_s *inc;
+      struct s_node_s *body;
+    } for_stmt;
     struct {
       const lexeme_t  *fn_ident;
       struct s_node_s *param_decl;

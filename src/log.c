@@ -228,6 +228,7 @@ static void token_print(token_t token)
     "-=",             // TK_SUB_ASSIGN
     "*=",             // TK_MUL_ASSIGN
     "/=",             // TK_DIV_ASSIGN
+    "for",            // TK_FOR
     "EOF"             // TK_EOF
   };
   

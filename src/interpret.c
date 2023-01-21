@@ -35,6 +35,7 @@ static bool int_print(scope_t *scope, const s_node_t *node);
 static bool int_ret_stmt(scope_t *scope, const s_node_t *node);
 static bool int_if_stmt(scope_t *scope, const s_node_t *node);
 static bool int_while_stmt(scope_t *scope, const s_node_t *node);
+static bool int_for_stmt(scope_t *scope, const s_node_t *node);
 static bool int_decl(scope_t *scope, const s_node_t *node);
 static bool int_class_def(scope_t *scope, const s_node_t *node);
 
@@ -219,6 +220,10 @@ bool int_stmt(scope_t *scope, const s_node_t *node)
     if (!int_while_stmt(scope, node->stmt.body))
       return false;
     break;
+  case S_FOR_STMT:
+    if (!int_for_stmt(scope, node->stmt.body))
+      return false;
+    break;
   case S_FN:
     if (!int_fn(scope, node->stmt.body, NULL))
       return false;
@@ -288,6 +293,33 @@ bool int_while_stmt(scope_t *scope, const s_node_t *node)
       return false;
     
     if (!int_expr(scope, &cond, node->while_stmt.cond))
+      return false;
+  }
+  
+  return true;
+}
+
+bool int_for_stmt(scope_t *scope, const s_node_t *node)
+{
+  if (node->for_stmt.decl) {
+    if (!int_stmt(scope, node->for_stmt.decl))
+      return false;
+  }
+  
+  expr_t cond;
+  if (!int_expr(scope, &cond, node->for_stmt.cond))
+    return false;
+  
+  while (cond.i32 != 0) {
+    if (!int_body(scope, node->for_stmt.body))
+      return false;
+    
+    if (node->for_stmt.inc) {
+      if (!int_expr(scope, &cond, node->for_stmt.inc))
+        return false;
+    }
+    
+    if (!int_expr(scope, &cond, node->for_stmt.cond))
       return false;
   }
   
@@ -697,6 +729,7 @@ bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node)
       }
     } else if ((type_class(&lhs.type) && type_class(&rhs.type))
     || (type_array(&lhs.type) && type_array(&rhs.type))
+    || (type_cmp(&lhs.type, &type_string) && type_cmp(&rhs.type, &type_string))
     && type_cmp(&lhs.type, &rhs.type)) {
       switch (node->binop.op->token) {
       case '=':
@@ -705,10 +738,11 @@ bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node)
       default:
         goto err_no_op;
       }
-    }
+    } else
+      goto err_no_op;
     
     *expr = lhs;
-    mem_assign(lhs.loc_base, lhs.loc_offset, &type_i32, &rhs);
+    mem_assign(lhs.loc_base, lhs.loc_offset, &lhs.type, &rhs);
   } else {
     expr->loc_base = NULL;
     expr->loc_offset = 0;
@@ -811,11 +845,38 @@ bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node)
   return true;
 }
 
+static bool array_direct(expr_t *expr, const s_node_t *node, const expr_t *base)
+{
+  heap_block_t *heap_block = (heap_block_t*) base->align_of;
+  if (!heap_block->use) {
+    LOG_ERROR("use of deallocated block");
+    return false;
+  }
+  
+  if (strcmp(node->direct.child_ident->data.ident, "length") == 0) {
+    expr->type = type_i32;
+    expr->i32 = heap_block->size / type_size_base(&base->type);
+    expr->loc_base = NULL;
+    expr->loc_offset = 0;
+  } else {
+    c_error(
+      node->direct.child_ident,
+      "request for unknown member '%s' in array",
+      node->direct.child_ident->data.ident);
+    return false;
+  }
+  
+  return true;
+}
+
 bool int_direct(scope_t *scope, expr_t *expr, const s_node_t *node)
 {
   expr_t base;
   if (!int_expr(scope, &base, node->direct.base))
     return false;
+  
+  if (type_array(&base.type))
+    return array_direct(expr, node, &base);
   
   if (!type_class(&base.type)) {
     c_error(
@@ -1085,6 +1146,8 @@ static void mem_load(char *loc_base, int loc_offset, const type_t *type, expr_t 
     expr->align_of = *((size_t*) &loc_base[loc_offset]);
   else if (type_class(type))
     expr->align_of = *((size_t*) &loc_base[loc_offset]);
+  else if (type_cmp(type, &type_string))
+    expr->align_of = *((size_t*) &loc_base[loc_offset]);
   else if (type_cmp(type, &type_i32))
     expr->i32 = *((int*) &loc_base[loc_offset]);
   else if (type_cmp(type, &type_f32))
@@ -1100,6 +1163,8 @@ static void mem_assign(char *loc_base, int loc_offset, const type_t *type, expr_
   if (type_array(type))
     *((size_t*) &loc_base[loc_offset]) = (size_t) expr->align_of;
   else if (type_class(type))
+    *((size_t*) &loc_base[loc_offset]) = (size_t) expr->align_of;
+  else if (type_cmp(type, &type_string))
     *((size_t*) &loc_base[loc_offset]) = (size_t) expr->align_of;
   else if (type_cmp(type, &type_i32))
     *((int*) &loc_base[loc_offset]) = expr->i32;
@@ -1183,9 +1248,9 @@ static void heap_clean_R(scope_t *scope)
 static void heap_clean_array_class(heap_block_t *heap_block, const scope_t *class)
 {
   heap_block_t **array_class = (heap_block_t**) heap_block->block;
-  int num_class = heap_block->size / sizeof(size_t);
+  int array_length = heap_block->size / sizeof(size_t);
 
-  for (int i = 0; i < num_class; i++) {
+  for (int i = 0; i < array_length; i++) {
     if (array_class[i]) {
       array_class[i]->use = true;
       heap_clean_class(array_class[i], class);
@@ -1205,7 +1270,7 @@ static void heap_clean_class(heap_block_t *heap_block, const scope_t *class)
 
 static void heap_clean_var(var_t *var)
 {
-  if (var->type.spec == SPEC_CLASS || var->type.arr) {
+  if (var->type.spec == SPEC_CLASS || var->type.spec == SPEC_STRING || var->type.arr) {
     expr_t expr;
     mem_load(mem_stack, var->loc, &var->type, &expr);
     
