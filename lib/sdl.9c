@@ -1,0 +1,16 @@
+fn draw_line(i32 x0, i32 y0, i32 x1, i32 y1);
+
+fn draw_circle(f32 x_pos, f32 y_pos, f32 radius)
+{
+  f32 d_deg = 2 * M_PI * 0.1;
+  
+  for (i32 i = 0; i < 10; i++) {
+    f32 x0 = x_pos + cos(i * d_deg) * radius;
+    f32 y0 = y_pos + sin(i * d_deg) * radius;
+    
+    f32 x1 = x_pos + cos((i + 1) * d_deg) * radius;
+    f32 y1 = y_pos + sin((i + 1) * d_deg) * radius;
+    
+    draw_line(x0, y0, x1, y1);
+  }
+}

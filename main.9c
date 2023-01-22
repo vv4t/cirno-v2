@@ -1,0 +1,28 @@
+#include "lib/math.9c"
+#include "lib/sdl.9c"
+
+f32 t = 0;
+
+f32 x_c = 30;
+f32 y_c = 30;
+
+f32 u_c = 4;
+f32 v_c = 4;
+
+fn update()
+{
+  x_c += u_c;
+  y_c += v_c;
+  
+  if (x_c - 15 < 0 || x_c + 15 > 640)
+    u_c = -u_c;
+  
+  if (y_c - 15 < 0 || y_c + 15 > 480)
+    v_c = -v_c;
+  
+  draw_circle(x_c, y_c, 15);
+  draw_circle(x_c, y_c, 15);
+  draw_circle(x_c, y_c, 5);
+  
+  t += 0.15;
+}

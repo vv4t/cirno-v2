@@ -1,7 +1,7 @@
 #ifndef ZONE_H
 #define ZONE_H
 
-#define ZONE_DEBUG 1
+#define ZONE_DEBUG 0
 
 #if ZONE_DEBUG == 1
   #define ZONE_ALLOC(size) zone_alloc(__FILE__, __LINE__, size)

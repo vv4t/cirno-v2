@@ -7,7 +7,8 @@
 #include <string.h>
 
 typedef struct {
-  char        *file;
+  char        *file[16];
+  int         num_file;
   int         file_size;
   const char  *src;
   const char  *c;
@@ -84,7 +85,7 @@ static lexeme_t *match_const_integer(lex_file_t *lex);
 static lexeme_t *match_string_literal(lex_file_t *lex);
 static lexeme_t *match_word(lex_file_t *lex);
 static lexeme_t *match_op(lex_file_t *lex);
-static lexeme_t *match_pre_proc(lex_file_t *lex);
+static lexeme_t *match_include(lex_file_t *lex);
 static void     token_print(token_t token);
 static void     lexeme_print(const lexeme_t *lexeme);
 static void     lex_printf(const lexeme_t *lexeme, const char *fmt, va_list args);
@@ -114,7 +115,8 @@ bool lex_parse(lex_t *lex, const char *src)
   heap_file[heap_file_len] = 0;
   
   lex_file_t lex_file = {
-    .file = heap_file,
+    .file[0] = heap_file,
+    .num_file = 1,
     .file_size = heap_file_len,
     .src = buffer,
     .c = buffer,
@@ -126,7 +128,7 @@ bool lex_parse(lex_t *lex, const char *src)
   while (*lex_file.c) {
     lexeme_t *lexeme = match_const_integer(&lex_file);
     if (!lexeme)
-      lexeme = match_pre_proc(&lex_file);
+      lexeme = match_include(&lex_file);
     if (!lexeme)
       lexeme = match_string_literal(&lex_file);
     if (!lexeme)
@@ -169,10 +171,12 @@ bool lex_parse(lex_t *lex, const char *src)
     head = make_lexeme(TK_EOF, &lex_file);
   
   *lex = (lex_t) {
-    .file = lex_file.file,
+    .num_file = lex_file.num_file,
     .lexeme = body,
     .start = body
   };
+  
+  memcpy(lex->file, lex_file.file, sizeof(lex_file.file));
   
   ZONE_FREE(buffer);
   
@@ -202,7 +206,8 @@ void lex_free(lex_t *lex)
     lexeme = next;
   }
   
-  ZONE_FREE(lex->file);
+  for (int i = 0; i < lex->num_file; i++)
+    ZONE_FREE(lex->file[i]);
 }
 
 void lex_next(lex_t *lex)
@@ -233,7 +238,7 @@ static lexeme_t *make_lexeme(token_t token, const lex_file_t *lex)
   lexeme_t *lexeme = ZONE_ALLOC(sizeof(lexeme_t));
   lexeme->token = token;
   lexeme->line = lex->line;
-  lexeme->src = lex->file;
+  lexeme->src = lex->file[0];
   lexeme->next = NULL;
   return lexeme;
 }
@@ -262,9 +267,9 @@ static char *filename(lex_file_t *lex)
   memcpy(file, str_start, str_len);
   file[str_len] = 0;
   
-  char *slash = strrchr(lex->file, '/');
+  char *slash = strrchr(lex->file[0], '/');
   if (slash) {
-    int dir_len = slash - lex->file;
+    int dir_len = slash - lex->file[0];
     int total_len = dir_len + str_len;
     char *file_dir_concat = ZONE_ALLOC(total_len);
     memcpy(file_dir_concat, lex->file, dir_len);
@@ -278,20 +283,7 @@ static char *filename(lex_file_t *lex)
   return file;
 }
 
-static char *lex_file_add_file(lex_file_t *lex, const char *file)
-{
-  int file_len = strlen(file);
-  
-  lex->file = ZONE_REALLOC(lex->file, lex->file_size + file_len + 1);
-  char *new_file = &lex->file[lex->file_size + 1];
-  memcpy(new_file, file, file_len);
-  new_file[file_len] = 0;
-  lex->file_size += file_len;
-  
-  return new_file;
-}
-
-static lexeme_t *match_pre_proc(lex_file_t *lex)
+static lexeme_t *match_include(lex_file_t *lex)
 {
   if (*lex->c != '#')
     return NULL;
@@ -299,19 +291,16 @@ static lexeme_t *match_pre_proc(lex_file_t *lex)
   if (strncmp(lex->c, "#include ", strlen("#include ")) == 0) {
     lex->c += strlen("#include ");
     char *file = filename(lex);
-    if (!file)
-      return NULL;
-    
-    char *new_file = lex_file_add_file(lex, file);
-    ZONE_FREE(file);
     
     lex_t include_file;
-    if (!lex_parse(&include_file, new_file)) {
-      printf("%s:%i:error: could not open '%s'\n", lex->file, lex->line, new_file);
+    if (!lex_parse(&include_file, file)) {
+      printf("%s:%i:error: could not open '%s'\n", lex->file, lex->line, file);
       return NULL;
     }
     
-    ZONE_FREE(include_file.file);
+    ZONE_FREE(file);
+    memcpy(&lex->file[lex->num_file], include_file.file, sizeof(char*) * include_file.num_file);
+    lex->num_file += include_file.num_file;
     
     return include_file.start;
   }
@@ -364,7 +353,7 @@ static lexeme_t *match_word(lex_file_t *lex)
     *letter++ = *lex->c++;
   while (isalnum(*lex->c) || *lex->c == '_');
   
-  *letter++ = 0;
+  *letter = 0;
   
   for (int i = 0; i < num_word_table; i++)
     if (strcmp(word, word_table[i].str) == 0)

@@ -1,0 +1,16 @@
+fn cos(f32 theta);
+fn sin(f32 theta);
+
+f32 M_PI = 3.14159;
+
+class_def vec2 {
+  f32 x;
+  f32 y;
+  
+  fn init(f32 x, f32 y) : class vec2
+  {
+    this.x = x;
+    this.y = y;
+    return this;
+  }
+};

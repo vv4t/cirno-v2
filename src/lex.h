@@ -52,7 +52,8 @@ typedef struct lexeme_s {
 } lexeme_t;
 
 typedef struct {
-  char        *file;
+  char        *file[16];
+  int         num_file;
   lexeme_t    *lexeme;
   lexeme_t    *start;
 } lex_t;

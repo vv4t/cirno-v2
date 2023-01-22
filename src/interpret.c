@@ -36,7 +36,7 @@ static bool int_ret_stmt(scope_t *scope, const s_node_t *node);
 static bool int_if_stmt(scope_t *scope, const s_node_t *node);
 static bool int_while_stmt(scope_t *scope, const s_node_t *node);
 static bool int_for_stmt(scope_t *scope, const s_node_t *node);
-static bool int_decl(scope_t *scope, const s_node_t *node);
+static bool int_decl(scope_t *scope, const s_node_t *node, bool init);
 static bool int_class_def(scope_t *scope, const s_node_t *node);
 
 static bool int_type(scope_t *scope, type_t *type, const s_node_t *node);
@@ -207,7 +207,7 @@ bool int_stmt(scope_t *scope, const s_node_t *node)
       return false;
     break;
   case S_DECL:
-    if (!int_decl(scope, node->stmt.body))
+    if (!int_decl(scope, node->stmt.body, true))
       return false;
     break;
   case S_CLASS_DEF:
@@ -404,7 +404,7 @@ bool int_class_def(scope_t *scope, const s_node_t *node)
         return false;
       break;
     case S_DECL:
-      if (!int_decl(class_scope, head->stmt.body))
+      if (!int_decl(class_scope, head->stmt.body, false))
         return false;
       break;
     default:
@@ -418,7 +418,7 @@ bool int_class_def(scope_t *scope, const s_node_t *node)
   return true;
 }
 
-bool int_decl(scope_t *scope, const s_node_t *node)
+bool int_decl(scope_t *scope, const s_node_t *node, bool init)
 {
   if (scope_find_var(scope, node->decl.ident->data.ident)) {
     c_error(node->decl.ident, "redefinition of '%s'", node->decl.ident->data.ident);
@@ -429,30 +429,39 @@ bool int_decl(scope_t *scope, const s_node_t *node)
   if (!int_type(scope, &type, node->decl.type))
     return false;
   
-  expr_t expr;
-  if (node->decl.init) {
-    if (!int_expr(scope, &expr, node->decl.init))
-      return false;
+  var_t *var = scope_add_var(scope, &type, node->decl.ident->data.ident);
+  if (init) {
+    expr_t expr;
+    if (node->decl.init) {
+      if (!int_expr(scope, &expr, node->decl.init))
+        return false;
+      
+      if (!expr_cast(&expr, &type)) {
+        c_error(
+          node->decl.type->type.spec,
+          "incompatible types when initializing '%z' with '%z'",
+          &type, &expr.type);
+        return false;
+      }
+    } else {
+      expr = (expr_t) {0};
+    }
     
-    if (!expr_cast(&expr, &type)) {
-      c_error(
-        node->decl.type->type.spec,
-        "incompatible types when initializing '%z' with '%z'",
-        &type, &expr.type);
+    if (scope->size >= mem_stack_end) {
+      LOG_ERROR("ran out of memory %i/%i", scope->size, mem_stack_end);
       return false;
     }
+    
+    mem_assign(mem_stack, var->loc, &var->type, &expr);
   } else {
-    expr = (expr_t) {0};
+    if (node->decl.init) {
+      c_error(
+        node->decl.ident,
+        "cannot initialize '%s",
+        node->decl.ident->data.ident);
+      return false;
+    }
   }
-  
-  var_t *var = scope_add_var(scope, &type, node->decl.ident->data.ident);
-  
-  if (scope->size >= mem_stack_end) {
-    LOG_ERROR("ran out of memory %i/%i", scope->size, mem_stack_end);
-    return false;
-  }
-  
-  mem_assign(mem_stack, var->loc, &var->type, &expr);
   
   return true;
 }
