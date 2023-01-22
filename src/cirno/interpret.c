@@ -54,7 +54,7 @@ static bool int_post_op(scope_t *scope, expr_t *expr, const s_node_t *node);
 
 static bool int_load_ident(const scope_t *scope, heap_block_t *heap_block, expr_t *expr, const lexeme_t *lexeme);
 
-void int_start()
+void int_init()
 {
   scope_new(&scope_global, NULL, &type_none, NULL, NULL);
 }
@@ -88,6 +88,10 @@ void int_stop()
 bool int_call(const char *ident, expr_t *arg_list, int num_arg_list)
 {
   fn_t *fn = scope_find_fn(&scope_global, ident);
+  if (!fn) {
+    printf("int_call: error: function '%s' undeclared\n", ident);
+    return false;
+  }
   
   scope_t new_scope;
   scope_new(&new_scope, NULL, &fn->type, &scope_global, fn->scope_parent);
@@ -131,6 +135,8 @@ bool int_call(const char *ident, expr_t *arg_list, int num_arg_list)
   int_body(&new_scope, fn->node);
   
   scope_free(&new_scope);
+  
+  return true;
 }
 
 void int_bind(const char *ident, xaction_t xaction)
@@ -145,7 +151,7 @@ void int_bind(const char *ident, xaction_t xaction)
     ident);
 }
 
-bool int_var_load(const scope_t *scope, expr_t *expr, char *ident)
+bool int_arg_load(const scope_t *scope, expr_t *expr, char *ident)
 {
   var_t *var = scope_find_var(scope, ident);
   if (!var)
@@ -428,7 +434,7 @@ bool int_decl(scope_t *scope, const s_node_t *node)
     if (!int_expr(scope, &expr, node->decl.init))
       return false;
     
-    if (!type_cmp(&type, &expr.type)) {
+    if (!expr_cast(&expr, &type)) {
       c_error(
         node->decl.type->type.spec,
         "incompatible types when initializing '%z' with '%z'",
@@ -514,7 +520,7 @@ bool int_expr(scope_t *scope, expr_t *expr, const s_node_t *node)
 bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
 {
   expr_t base;
-  if (!int_expr(scope, &base, node->index.base))
+  if (!int_expr(scope, &base, node->proc.base))
     return false;
   
   if (!type_fn(&base.type)) {
@@ -582,7 +588,7 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
     if (!int_expr(scope, &arg_value, arg->arg.body))
       return false;
     
-    if (!type_cmp(&type, &arg_value.type)) {
+    if (!expr_cast(&arg_value, &type)) {
       c_error(
         head->param_decl.ident,
         "expected '%z' but argument is of type '%z'",
@@ -669,6 +675,104 @@ err_no_op:
   return true;
 }
 
+static bool binop_i32(expr_t *expr, const expr_t *lhs, token_t op, const expr_t *rhs)
+{
+  expr->loc_base = NULL;
+  expr->loc_offset = 0;
+  expr->type = type_i32;
+  switch (op) {
+  case '+':
+    expr->i32 = lhs->i32 + rhs->i32;
+    break;
+  case '-':
+    expr->i32 = lhs->i32 - rhs->i32;
+    break;
+  case '*':
+    expr->i32 = lhs->i32 * rhs->i32;
+    break;
+  case '/':
+    expr->i32 = lhs->i32 / rhs->i32;
+    break;
+  case '<':
+    expr->i32 = lhs->i32 < rhs->i32;
+    break;
+  case '>':
+    expr->i32 = lhs->i32 > rhs->i32;
+    break;
+  case TK_LE:
+    expr->i32 = lhs->i32 <= rhs->i32;
+    break;
+  case TK_GE:
+    expr->i32 = lhs->i32 >= rhs->i32;
+    break;
+  case TK_EQ:
+    expr->i32 = lhs->i32 == rhs->i32;
+    break;
+  case TK_NE:
+    expr->i32 = lhs->i32 != rhs->i32;
+    break;
+  case TK_AND:
+    expr->i32 = lhs->i32 && rhs->i32;
+    break;
+  case TK_OR:
+    expr->i32 = lhs->i32 || rhs->i32;
+    break;
+  default:
+    return false;
+  }
+  
+  return true;
+}
+
+static bool binop_f32(expr_t *expr, const expr_t *lhs, token_t op, const expr_t *rhs)
+{
+  expr->type = type_f32;
+  expr->loc_base = NULL;
+  expr->loc_offset = 0;
+  switch (op) {
+  case '+':
+    expr->f32 = lhs->f32 + rhs->f32;
+    break;
+  case '-':
+    expr->f32 = lhs->f32 - rhs->f32;
+    break;
+  case '*':
+    expr->f32 = lhs->f32 * rhs->f32;
+    break;
+  case '/':
+    expr->f32 = lhs->f32 / rhs->f32;
+    break;
+  case '<':
+    expr->i32 = lhs->f32 < rhs->f32;
+    expr->type = type_i32;
+    break;
+  case '>':
+    expr->i32 = lhs->f32 > rhs->f32;
+    expr->type = type_i32;
+    break;
+  case TK_GE:
+    expr->f32 = lhs->f32 >= rhs->f32;
+    expr->type = type_i32;
+    break;
+  case TK_LE:
+    expr->f32 = lhs->f32 <= rhs->f32;
+    expr->type = type_i32;
+    break;
+  case TK_EQ:
+    expr->f32 = lhs->f32 == rhs->f32;
+    expr->type = type_i32;
+    break;
+  case TK_NE:
+    expr->f32 = lhs->f32 != rhs->f32;
+    expr->type = type_i32;
+    break;
+  default:
+    return false;
+  }
+  
+  return true;
+}
+
 bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node)
 {
   expr_t lhs;
@@ -741,95 +845,17 @@ bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node)
     } else
       goto err_no_op;
     
+    mem_assign(lhs.loc_base, lhs.loc_offset, &lhs.type, &lhs);
     *expr = lhs;
-    mem_assign(lhs.loc_base, lhs.loc_offset, &lhs.type, &rhs);
   } else {
     expr->loc_base = NULL;
     expr->loc_offset = 0;
-    if (expr_cast(&lhs, &type_i32) && expr_cast(&rhs, &type_i32)) {
-      expr->type = type_i32;
-      switch (node->binop.op->token) {
-      case '+':
-        expr->i32 = lhs.i32 + rhs.i32;
-        break;
-      case '-':
-        expr->i32 = lhs.i32 - rhs.i32;
-        break;
-      case '*':
-        expr->i32 = lhs.i32 * rhs.i32;
-        break;
-      case '/':
-        expr->i32 = lhs.i32 / rhs.i32;
-        break;
-      case '<':
-        expr->i32 = lhs.i32 < rhs.i32;
-        break;
-      case '>':
-        expr->i32 = lhs.i32 > rhs.i32;
-        break;
-      case TK_LE:
-        expr->i32 = lhs.i32 <= rhs.i32;
-        break;
-      case TK_GE:
-        expr->i32 = lhs.i32 >= rhs.i32;
-        break;
-      case TK_EQ:
-        expr->i32 = lhs.i32 == rhs.i32;
-        break;
-      case TK_NE:
-        expr->i32 = lhs.i32 != rhs.i32;
-        break;
-      case TK_AND:
-        expr->i32 = lhs.i32 && rhs.i32;
-        break;
-      case TK_OR:
-        expr->i32 = lhs.i32 || rhs.i32;
-        break;
-      default:
+    if (type_cmp(&lhs.type, &type_i32) && type_cmp(&rhs.type, &type_i32)) {
+      if (!binop_i32(expr, &lhs, node->binop.op->token, &rhs))
         goto err_no_op;
-      }
     } else if (expr_cast(&lhs, &type_f32) && expr_cast(&rhs, &type_f32)) {
-      expr->type = type_f32;
-      switch (node->binop.op->token) {
-      case '+':
-        expr->f32 = lhs.f32 + rhs.f32;
-        break;
-      case '-':
-        expr->f32 = lhs.f32 - rhs.f32;
-        break;
-      case '*':
-        expr->f32 = lhs.f32 * rhs.f32;
-        break;
-      case '/':
-        expr->f32 = lhs.f32 / rhs.f32;
-        break;
-      case '<':
-        expr->i32 = lhs.f32 < rhs.f32;
-        expr->type = type_i32;
-        break;
-      case '>':
-        expr->i32 = lhs.f32 > rhs.f32;
-        expr->type = type_i32;
-        break;
-      case TK_GE:
-        expr->f32 = lhs.f32 >= rhs.f32;
-        expr->type = type_i32;
-        break;
-      case TK_LE:
-        expr->f32 = lhs.f32 <= rhs.f32;
-        expr->type = type_i32;
-        break;
-      case TK_EQ:
-        expr->f32 = lhs.f32 == rhs.f32;
-        expr->type = type_i32;
-        break;
-      case TK_NE:
-        expr->f32 = lhs.f32 != rhs.f32;
-        expr->type = type_i32;
-        break;
-      default:
+      if (!binop_f32(expr, &lhs, node->binop.op->token, &rhs))
         goto err_no_op;
-      }
     } else {
   err_no_op:
       c_error(
@@ -854,10 +880,7 @@ static bool array_direct(expr_t *expr, const s_node_t *node, const expr_t *base)
   }
   
   if (strcmp(node->direct.child_ident->data.ident, "length") == 0) {
-    expr->type = type_i32;
-    expr->i32 = heap_block->size / type_size_base(&base->type);
-    expr->loc_base = NULL;
-    expr->loc_offset = 0;
+    expr_i32(expr, heap_block->size / type_size_base(&base->type));
   } else {
     c_error(
       node->direct.child_ident,
@@ -1073,16 +1096,10 @@ bool int_constant(scope_t *scope, expr_t *expr, const s_node_t *node)
   var_t *var;
   switch (node->constant.lexeme->token) {
   case TK_CONST_INTEGER:
-    expr->type = type_i32;
-    expr->i32 = node->constant.lexeme->data.i32;
-    expr->loc_base = NULL;
-    expr->loc_offset = 0;
+    expr_i32(expr, node->constant.lexeme->data.i32);
     break;
   case TK_CONST_FLOAT:
-    expr->type = type_f32;
-    expr->f32 = node->constant.lexeme->data.f32;
-    expr->loc_base = NULL;
-    expr->loc_offset = 0;
+    expr_f32(expr, node->constant.lexeme->data.f32);
     break;
   case TK_STRING_LITERAL:
     expr->type = type_string;

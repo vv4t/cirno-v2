@@ -163,7 +163,10 @@ bool lex_parse(lex_t *lex, const char *src)
     }
   }
   
-  head->next = make_lexeme(TK_EOF, &lex_file);
+  if (head)
+    head->next = make_lexeme(TK_EOF, &lex_file);
+  else
+    head = make_lexeme(TK_EOF, &lex_file);
   
   *lex = (lex_t) {
     .file = lex_file.file,
@@ -340,7 +343,7 @@ static lexeme_t *match_const_integer(lex_file_t *lex)
     }
     
     lexeme_t *lexeme = make_lexeme(TK_CONST_FLOAT, lex);
-    lexeme->data.f32 = num;
+    lexeme->data.f32 = f_num;
     return lexeme;
   }
   

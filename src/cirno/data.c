@@ -57,6 +57,22 @@ int type_size_base(const type_t *type)
   }
 }
 
+void expr_i32(expr_t *expr, int i32)
+{
+  expr->type = type_i32;
+  expr->loc_base = NULL;
+  expr->loc_offset = 0;
+  expr->i32 = i32;
+}
+
+void expr_f32(expr_t *expr, float f32)
+{
+  expr->type = type_f32;
+  expr->loc_base = NULL;
+  expr->loc_offset = 0;
+  expr->f32 = f32;
+}
+
 bool expr_cast(expr_t *expr, const type_t *type)
 {
   if (type_cmp(&expr->type, type))

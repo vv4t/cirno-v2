@@ -1,3 +1,0 @@
-#include "test/sieve.cn"
-
-print 4;

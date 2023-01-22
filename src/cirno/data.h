@@ -83,6 +83,8 @@ extern int  type_size_base(const type_t *type);
 
 extern bool expr_cast(expr_t *expr, const type_t *type);
 extern bool expr_lvalue(const expr_t *expr);
+extern void expr_i32(expr_t *expr, int i32);
+extern void expr_f32(expr_t *expr, float f32);
 
 extern void     scope_new(
   scope_t       *scope,

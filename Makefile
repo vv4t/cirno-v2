@@ -1,9 +1,15 @@
-.PHONY=build run
+.PHONY=build cli sdl
 
-build: cirno run
+build: cli sdl
 
-cirno: src/*.c src/*.h
-	gcc src/*.c -g -o cirno
+cirno_cli: src/cirno/*.c src/cirno_cli.c src/cirno/*.h
+	gcc src/cirno/*.c src/cirno_cli.c -g -o cirno_cli
 
-run:
-	./cirno -D test/include.cn
+cirno_sdl: src/cirno/*.c src/cirno_sdl.c src/cirno/*.h
+	gcc src/cirno/*.c src/cirno_sdl.c -lm -lSDL2 -g -o cirno_sdl
+
+cli: cirno_cli
+	./cirno_cli cli.cn
+
+sdl: cirno_sdl
+	./cirno_sdl sdl.cn
