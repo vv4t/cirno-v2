@@ -102,6 +102,11 @@ static void _class_free(void *block)
   ZONE_FREE(block);
 }
 
+static void _free(void *block)
+{
+  ZONE_FREE(block);
+}
+
 var_t *class_add_var(scope_t *class, const type_t *type, const char *ident)
 {
   var_t *var = ZONE_ALLOC(sizeof(var_t));
@@ -146,8 +151,8 @@ void scope_free(scope_t *scope)
     scope->scope_parent->scope_child = NULL;
   
   map_flush(&scope->map_class, _class_free);
-  map_flush(&scope->map_var, zone_free);
-  map_flush(&scope->map_fn, zone_free);
+  map_flush(&scope->map_var, _free);
+  map_flush(&scope->map_fn, _free);
 }
 
 var_t *scope_add_var(scope_t *scope, const type_t *type, const char *ident)
