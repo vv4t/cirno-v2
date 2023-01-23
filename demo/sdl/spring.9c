@@ -1,0 +1,26 @@
+#include "lib/math.9c"
+#include "lib/sdl.9c"
+
+f32 t = 0;
+
+f32 p_x = -60;
+f32 x = -60;
+
+f32 x0 = -10;
+
+f32 k = 5.0;
+
+f32 d_t = 0.15;
+
+fn update()
+{
+  f32 a = -k * (x - x0) - 9.8;
+  x += (x - p_x) + 0.5 * a * d_t * d_t;
+  p_x = x;
+  
+  draw_line(320, 240, 320, 240 - x);
+  draw_circle(320, 240 - x0, 5);
+  draw_circle(320, 240 - x, 5);
+  
+  t += d_t;
+}

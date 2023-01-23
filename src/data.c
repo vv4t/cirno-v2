@@ -174,7 +174,7 @@ var_t *scope_add_var(scope_t *scope, const type_t *type, const char *ident)
     if (scope_find->block)
       break;
     
-    scope_find = scope->scope_find;
+    scope_find = scope_find->scope_find;
   }
   
   var_t *var = ZONE_ALLOC(sizeof(var_t));
