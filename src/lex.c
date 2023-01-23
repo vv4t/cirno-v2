@@ -7,10 +7,8 @@
 #include <string.h>
 
 typedef struct {
-  char        *file[16];
-  int         num_file;
-  int         file_size;
-  const char  *src;
+  char        *file;
+  char        *src;
   const char  *c;
   int         line;
 } lex_file_t;
@@ -85,16 +83,36 @@ static lexeme_t *match_const_integer(lex_file_t *lex);
 static lexeme_t *match_string_literal(lex_file_t *lex);
 static lexeme_t *match_word(lex_file_t *lex);
 static lexeme_t *match_op(lex_file_t *lex);
-static lexeme_t *match_include(lex_file_t *lex);
+static lexeme_t *match_include(lex_file_t *lex, lex_t *base);
 static void     token_print(token_t token);
 static void     lexeme_print(const lexeme_t *lexeme);
 static void     lex_printf(const lexeme_t *lexeme, const char *fmt, va_list args);
 
+static lexeme_t *lex_scan(lex_file_t *lex_file, lex_t *base);
+static bool     lex_file_open(lex_file_t *lex_file, lex_t *base, const char *src);
 
 static void lexeme_free(lexeme_t *lexeme);
 static char *filename(lex_file_t *lex);
 
 bool lex_parse(lex_t *lex, const char *src)
+{
+  lex->num_file = 0;
+  
+  lex_file_t lex_file;
+  if (!lex_file_open(&lex_file, lex, src))
+    return NULL;
+  
+  lexeme_t *body = lex_scan(&lex_file, lex);
+  
+  lex->lexeme = body;
+  lex->start = body;
+  
+  ZONE_FREE(lex_file.src);
+  
+  return true;
+}
+
+static bool lex_file_open(lex_file_t *lex_file, lex_t *base, const char *src)
 {
   FILE *fp = fopen(src, "rb");
   
@@ -114,40 +132,42 @@ bool lex_parse(lex_t *lex, const char *src)
   memcpy(heap_file, src, heap_file_len);
   heap_file[heap_file_len] = 0;
   
-  lex_file_t lex_file = {
-    .file[0] = heap_file,
-    .num_file = 1,
-    .file_size = heap_file_len,
-    .src = buffer,
-    .c = buffer,
-    .line = 1
-  };
+  base->file[base->num_file++] = heap_file;
+  lex_file->file = heap_file;
+  lex_file->src = buffer;
+  lex_file->c = buffer;
+  lex_file->line = 1;
   
+  return true;
+}
+
+static lexeme_t *lex_scan(lex_file_t *lex_file, lex_t *base)
+{
   lexeme_t *head = NULL, *body = NULL;
   
-  while (*lex_file.c) {
-    lexeme_t *lexeme = match_const_integer(&lex_file);
+  while (*lex_file->c) {
+    lexeme_t *lexeme = match_const_integer(lex_file);
     if (!lexeme)
-      lexeme = match_include(&lex_file);
+      lexeme = match_include(lex_file, base);
     if (!lexeme)
-      lexeme = match_string_literal(&lex_file);
+      lexeme = match_string_literal(lex_file);
     if (!lexeme)
-      lexeme = match_word(&lex_file);
+      lexeme = match_word(lex_file);
     if (!lexeme)
-      lexeme = match_op(&lex_file);
+      lexeme = match_op(lex_file);
     
     if (!lexeme) {
-      switch (*lex_file.c) {
+      switch (*lex_file->c) {
       case '\n':
-        lex_file.line++;
+        lex_file->line++;
       case 0:
       case ' ':
       case '\t':
-        lex_file.c++;
+        lex_file->c++;
         break;
       default:
-        LOG_DEBUG("skipping unknown character: %i", *lex_file.c);
-        lex_file.c++;
+        LOG_DEBUG("skipping unknown character: %i", *lex_file->c);
+        lex_file->c++;
       }
     } else {
       if (head)
@@ -166,21 +186,11 @@ bool lex_parse(lex_t *lex, const char *src)
   }
   
   if (head)
-    head->next = make_lexeme(TK_EOF, &lex_file);
+    head->next = make_lexeme(TK_EOF, lex_file);
   else
-    head = make_lexeme(TK_EOF, &lex_file);
+    head = make_lexeme(TK_EOF, lex_file);
   
-  *lex = (lex_t) {
-    .num_file = lex_file.num_file,
-    .lexeme = body,
-    .start = body
-  };
-  
-  memcpy(&lex->file[0], &lex_file.file[0], sizeof(lex_file.file));
-  
-  ZONE_FREE(buffer);
-  
-  return true;
+  return body;
 }
 
 static void lexeme_free(lexeme_t *lexeme)
@@ -238,7 +248,7 @@ static lexeme_t *make_lexeme(token_t token, const lex_file_t *lex)
   lexeme_t *lexeme = ZONE_ALLOC(sizeof(lexeme_t));
   lexeme->token = token;
   lexeme->line = lex->line;
-  lexeme->src = lex->file[0];
+  lexeme->src = lex->file;
   lexeme->next = NULL;
   return lexeme;
 }
@@ -256,7 +266,7 @@ static char *filename(lex_file_t *lex)
   while (*lex->c != '"' && *lex->c != 0 && *lex->c != '\n');
   
   if (*lex->c == 0 || *lex->c == '\n') {
-    printf("%s:%i:error: missing terminating '\"'\n", lex->file[0], lex->line);
+    printf("%s:%i:error: missing terminating '\"'\n", lex->file, lex->line);
     return NULL;
   }
   
@@ -267,12 +277,12 @@ static char *filename(lex_file_t *lex)
   memcpy(file, str_start, str_len);
   file[str_len] = 0;
   
-  char *slash = strrchr(lex->file[0], '/');
+  char *slash = strrchr(lex->file, '/');
   if (slash) {
-    int dir_len = slash - lex->file[0];
+    int dir_len = slash - lex->file;
     int total_len = dir_len + str_len;
     char *file_dir_concat = ZONE_ALLOC(total_len + 1);
-    memcpy(file_dir_concat, lex->file[0], dir_len);
+    memcpy(file_dir_concat, lex->file, dir_len);
     file_dir_concat[dir_len] = '/';
     memcpy(&file_dir_concat[dir_len + 1], file, str_len);
     file_dir_concat[total_len + 1] = 0;
@@ -284,7 +294,7 @@ static char *filename(lex_file_t *lex)
   return file;
 }
 
-static lexeme_t *match_include(lex_file_t *lex)
+static lexeme_t *match_include(lex_file_t *lex, lex_t *base)
 {
   if (*lex->c != '#')
     return NULL;
@@ -293,17 +303,25 @@ static lexeme_t *match_include(lex_file_t *lex)
     lex->c += strlen("#include ");
     char *file = filename(lex);
     
-    lex_t include_file;
-    if (!lex_parse(&include_file, file)) {
-      printf("%s:%i:error: could not open '%s'\n", lex->file[0], lex->line, file);
+    for (int i = 0; i < base->num_file; i++) {
+      if (strcmp(file, base->file[i]) == 0) {
+        ZONE_FREE(file);
+        return NULL;
+      }
+    }
+    
+    lex_file_t lex_file;
+    if (!lex_file_open(&lex_file, base, file)) {
+      printf("%s:%i:error: could not open '%s'\n", lex->file, lex->line, file);
       return NULL;
     }
     
-    ZONE_FREE(file);
-    memcpy(&lex->file[lex->num_file], include_file.file, sizeof(char*) * include_file.num_file);
-    lex->num_file += include_file.num_file;
+    lexeme_t *body = lex_scan(&lex_file, base);
     
-    return include_file.start;
+    ZONE_FREE(lex_file.src);
+    ZONE_FREE(file);
+    
+    return body;
   }
   
   return NULL;

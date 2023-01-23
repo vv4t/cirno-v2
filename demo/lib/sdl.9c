@@ -1,3 +1,5 @@
+#include "math.9c"
+
 fn draw_line(i32 x0, i32 y0, i32 x1, i32 y1);
 
 fn draw_circle(f32 x_pos, f32 y_pos, f32 radius)
