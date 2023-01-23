@@ -53,6 +53,9 @@ static void c_printf(const char *fmt, va_list args)
       case 's':
         printf("%s", va_arg(args, char*));
         break;
+      case 'i':
+        printf("%i", va_arg(args, int));
+        break;
       case 'h': // s_node_t expr
         s_node_print(va_arg(args, const s_node_t *));
         break;
@@ -146,7 +149,7 @@ static void expr_print(const expr_t *expr)
       type_print(&fn->type);
     break;
   case SPEC_STRING:
-    printf("%s", (const char*) expr->align_of);
+    printf("%s", (char*) (*(heap_block_t*) expr->align_of).block);
     break;
   }
 }

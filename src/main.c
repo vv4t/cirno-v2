@@ -3,6 +3,7 @@
 #include "lex.h"
 #include "syntax.h"
 #include "interpret.h"
+#include "lib.h"
 #include <unistd.h>
 #include <stdio.h>
 
@@ -49,6 +50,9 @@ int main(int argc, char *argv[])
   s_node_t *node = s_parse(&lex);
   if (!s_error()) {
     int_init();
+    
+    lib_load_stdlib();
+    lib_load_math();
     
     if (flag_sdl)
       sdl_init();

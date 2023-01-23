@@ -8,6 +8,15 @@
 
 typedef struct scope_s scope_t;
 
+typedef struct heap_block_s {
+  char  *block;
+  bool  use;
+  int   size;
+  
+  struct heap_block_s *next;
+  struct heap_block_s *prev;
+} heap_block_t;
+
 typedef enum {
   SPEC_NONE,
   SPEC_I32,

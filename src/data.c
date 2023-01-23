@@ -1,5 +1,6 @@
 #include "data.h"
 
+#include "log.h"
 #include "zone.h"
 #include <stdio.h>
 
@@ -35,14 +36,7 @@ int type_size(const type_t *type)
   if (type->arr)
     return 8;
   
-  switch (type->spec) {
-  case SPEC_I32:
-    return 4;
-  case SPEC_F32:
-    return 4;
-  case SPEC_CLASS:
-    return 8;
-  }
+  return type_size_base(type);
 }
 
 int type_size_base(const type_t *type)
@@ -53,7 +47,11 @@ int type_size_base(const type_t *type)
   case SPEC_F32:
     return 4;
   case SPEC_CLASS:
+  case SPEC_STRING:
     return 8;
+  default:
+    LOG_ERROR("unknown type (%i)", type->spec);
+    return 0;
   }
 }
 

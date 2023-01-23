@@ -4,17 +4,9 @@
 #include "zone.h"
 #include <string.h>
 
-typedef struct heap_block_s {
-  char  *block;
-  bool  use;
-  int   size;
-  
-  struct heap_block_s *next;
-  struct heap_block_s *prev;
-} heap_block_t;
-
 static heap_block_t *heap_block_list = NULL;
 static heap_block_t *heap_alloc(int size);
+static heap_block_t *heap_alloc_string(const char *string);
 static void         heap_clean();
 static void         heap_clean_R(scope_t *scope);
 static void         heap_clean_class(heap_block_t *heap_block, const scope_t *class);
@@ -91,22 +83,22 @@ bool int_call(const char *ident, expr_t *arg_list, int num_arg_list)
   while (head) {
     if (arg_num >= num_arg_list) {
       printf("int_call: error: %s(): too few arguments\n", ident);
-      return false;
+      goto err_cleanup;
     }
     
     type_t type;
     if (!int_type(&new_scope, &type, head->param_decl.type))
-      return false;
+      goto err_cleanup;
     
     if (!type_cmp(&type, &arg_list[arg_num].type))
-      return false;
+      goto err_cleanup;
     
     if (scope_find_var(&new_scope, head->param_decl.ident->data.ident)) {
       c_error(
         head->param_decl.ident,
         "redefinition of param '%s'",
         head->param_decl.ident->data.ident);
-      return false;
+      goto err_cleanup;
     }
     
     var_t *var = scope_add_var(&new_scope, &type, head->param_decl.ident->data.ident);
@@ -118,6 +110,8 @@ bool int_call(const char *ident, expr_t *arg_list, int num_arg_list)
   
   if (arg_num < num_arg_list) {
     LOG_ERROR("%s(): too many arguments", ident);
+err_cleanup:
+    scope_free(&new_scope);
     return false;
   }
   
@@ -170,8 +164,11 @@ bool int_body_scope(scope_t *scope, const s_node_t *node)
   scope_new(&new_scope, NULL, &scope->ret_type, scope, scope, false);
   new_scope.size = scope->size;
   
-  if (!int_body(&new_scope, node))
+  if (!int_body(&new_scope, node)) {
+    scope_free(&new_scope);
+    scope->scope_child = NULL;
     return false;
+  }
   
   scope->ret_flag = new_scope.ret_flag;
   scope->ret_value = new_scope.ret_value;
@@ -316,15 +313,19 @@ bool int_for_stmt(scope_t *scope, const s_node_t *node)
   
   while (cond.i32 != 0) {
     if (!int_body_scope(&new_scope, node->for_stmt.body))
-      return false;
+      goto err_cleanup;
     
     if (node->for_stmt.inc) {
       if (!int_expr(&new_scope, &cond, node->for_stmt.inc))
-        return false;
+        goto err_cleanup;
     }
     
-    if (!int_expr(&new_scope, &cond, node->for_stmt.cond))
+    if (!int_expr(&new_scope, &cond, node->for_stmt.cond)) {
+err_cleanup:
+      scope_free(&new_scope);
+      scope->scope_child = NULL;
       return false;
+    }
   }
   
   scope->ret_flag = new_scope.ret_flag;
@@ -791,6 +792,31 @@ static bool binop_f32(expr_t *expr, const expr_t *lhs, token_t op, const expr_t 
   return true;
 }
 
+static bool binop_string(expr_t *expr, const expr_t *lhs, token_t op, const expr_t *rhs)
+{
+  if (op == '+') {
+    heap_block_t *str_lhs = (heap_block_t*) lhs->align_of;
+    heap_block_t *str_rhs = (heap_block_t*) rhs->align_of;
+    
+    int new_len = str_lhs->size + str_rhs->size - 2;
+    
+    heap_block_t *concat_str = heap_alloc(new_len + 1);
+    
+    memcpy(concat_str->block, str_lhs->block, str_lhs->size - 1);
+    memcpy(&concat_str->block[str_lhs->size - 1], str_rhs->block, str_rhs->size - 1);
+    
+    concat_str->block[new_len] = 0;
+    
+    expr->type = type_string;
+    expr->align_of = (size_t) concat_str;
+    expr->loc_base = NULL;
+    expr->loc_offset = 0;
+  } else {
+    return false;
+  }
+  return true;
+}
+
 bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node)
 {
   expr_t lhs;
@@ -874,8 +900,11 @@ bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node)
     } else if (expr_cast(&lhs, &type_f32) && expr_cast(&rhs, &type_f32)) {
       if (!binop_f32(expr, &lhs, node->binop.op->token, &rhs))
         goto err_no_op;
+    } else if (type_cmp(&lhs.type, &type_string) && type_cmp(&rhs.type, &type_string)) {
+      if (!binop_string(expr, &lhs, node->binop.op->token, &rhs))
+        goto err_no_op;
     } else {
-  err_no_op:
+err_no_op:
       c_error(
         node->binop.op,
         "unknown operand type for '%t': '%z' and '%z' '%h'",
@@ -987,7 +1016,7 @@ bool int_index(scope_t *scope, expr_t *expr, const s_node_t *node)
   *expr = base;
   expr->type.arr = false;
   expr->loc_base = (char*) heap_block->block;
-  expr->loc_offset += offset;
+  expr->loc_offset = offset;
   mem_load(expr->loc_base, expr->loc_offset, &expr->type, expr);
   
   return true;
@@ -1021,22 +1050,64 @@ bool int_array_init(scope_t *scope, expr_t *expr, const s_node_t *node)
   if (!int_type(scope, &type, node->array_init.type))
     return false;
   
-  expr_t size;
-  if (!int_expr(scope, &size, node->array_init.size))
-    return false;
-  
-  if (!type_cmp(&size.type, &type_i32)) {
-    c_error(
-      node->array_init.array_init,
-      "size of array has non-integer type");
+  if (node->array_init.init) {
+    int size = 0;
+    s_node_t *head = node->array_init.init;
+    while (head) {
+      size++;
+      head = head->arg.next;
+    }
+    
+    expr->type = type;
+    expr->type.arr = true;
+    expr->align_of = (size_t) heap_alloc(size * type_size(&type));
+    expr->loc_base = NULL;
+    expr->loc_offset = 0;
+    
+    int num_arg = 0;
+    head = node->array_init.init;
+    while (head) {
+      expr_t arg;
+      if (!int_expr(scope, &arg, head->arg.body))
+        return false;
+      
+      if (!type_cmp(&arg.type, &type)) {
+        c_error(
+          node->array_init.array_init,
+          "incompatible types when initializing array type '%z' with '%z' at '%h'",
+          &type,
+          &arg.type,
+          head->arg.body);
+        return false;
+      }
+      
+      heap_block_t *heap_block = (heap_block_t*) expr->align_of;
+      mem_assign(heap_block->block, num_arg * type_size(&type), &type, &arg);
+      
+      num_arg++;
+      head = head->arg.next;
+    }
+  } else if (node->array_init.size) {
+    expr_t size;
+    if (!int_expr(scope, &size, node->array_init.size))
+      return false;
+    
+    if (!type_cmp(&size.type, &type_i32)) {
+      c_error(
+        node->array_init.array_init,
+        "size of array has non-integer type");
+      return false;
+    }
+    
+    expr->type = type;
+    expr->type.arr = true;
+    expr->align_of = (size_t) heap_alloc(size.i32 * type_size(&type));
+    expr->loc_base = NULL;
+    expr->loc_offset = 0;
+  } else {
+    LOG_ERROR("missing size or init");
     return false;
   }
-  
-  expr->type = type;
-  expr->type.arr = true;
-  expr->align_of = (size_t) heap_alloc(size.i32 * type_size(&type));
-  expr->loc_base = NULL;
-  expr->loc_offset = 0;
   
   return true;
 }
@@ -1106,7 +1177,7 @@ bool int_constant(scope_t *scope, expr_t *expr, const s_node_t *node)
     break;
   case TK_STRING_LITERAL:
     expr->type = type_string;
-    expr->align_of = (size_t) node->constant.lexeme->data.string_literal;
+    expr->align_of = (size_t) heap_alloc_string(node->constant.lexeme->data.string_literal);
     expr->loc_base = NULL;
     expr->loc_offset = 0;
     break;
@@ -1168,12 +1239,12 @@ static void mem_load(char *loc_base, int loc_offset, const type_t *type, expr_t 
     expr->align_of = *((size_t*) &loc_base[loc_offset]);
   else if (type_cmp(type, &type_string))
     expr->align_of = *((size_t*) &loc_base[loc_offset]);
+  else if (type_cmp(type, &type_string))
+    expr->align_of = *((size_t*) &loc_base[loc_offset]);
   else if (type_cmp(type, &type_i32))
     expr->i32 = *((int*) &loc_base[loc_offset]);
   else if (type_cmp(type, &type_f32))
     expr->f32 = *((float*) &loc_base[loc_offset]);
-  else if (type_cmp(type, &type_string))
-    expr->align_of = *((size_t*) &loc_base[loc_offset]);
   else
     LOG_DEBUG("unknown type");
 }
@@ -1218,6 +1289,15 @@ static heap_block_t *heap_alloc(int size)
     heap_block_list->next = NULL;
   }
   
+  return heap_block;
+}
+
+static heap_block_t *heap_alloc_string(const char *string)
+{
+  int len = strlen(string);
+  heap_block_t *heap_block = heap_alloc(len + 1);
+  memcpy(heap_block->block, string, len);
+  heap_block->block[len] = 0;
   return heap_block;
 }
 
@@ -1275,7 +1355,7 @@ static void heap_clean_array_class(heap_block_t *heap_block, const scope_t *clas
 {
   heap_block_t **array_class = (heap_block_t**) heap_block->block;
   int array_length = heap_block->size / sizeof(size_t);
-
+  
   for (int i = 0; i < array_length; i++) {
     if (array_class[i]) {
       array_class[i]->use = true;
@@ -1296,7 +1376,9 @@ static void heap_clean_class(heap_block_t *heap_block, const scope_t *class)
 
 static void heap_clean_var(var_t *var)
 {
-  if (var->type.spec == SPEC_CLASS || var->type.spec == SPEC_STRING || var->type.arr) {
+  if (var->type.spec == SPEC_CLASS
+  || var->type.spec == SPEC_STRING
+  || var->type.arr) {
     expr_t expr;
     mem_load(mem_stack, var->loc, &var->type, &expr);
     heap_clean_expr(&expr);
@@ -1305,7 +1387,9 @@ static void heap_clean_var(var_t *var)
 
 static void heap_clean_expr(expr_t *expr)
 {
-  if (expr->type.spec == SPEC_CLASS || expr->type.spec == SPEC_STRING || expr->type.arr) {
+  if (expr->type.spec == SPEC_CLASS
+  || expr->type.spec == SPEC_STRING
+  || expr->type.arr) {
     heap_block_t *heap_block = (heap_block_t*) expr->align_of;
     
     if (!heap_block)

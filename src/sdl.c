@@ -15,8 +15,6 @@ static int  lag_time = 0;
 static void sdl_poll();
 
 static bool draw_line_f(expr_t *ret_value, scope_t *scope_args);
-static bool cos_f(expr_t *ret_value, scope_t *scope_args);
-static bool sin_f(expr_t *ret_value, scope_t *scope_args);
 
 static expr_t arg_list[] = { };
 static int    num_arg = sizeof(arg_list) / sizeof(expr_t);
@@ -40,8 +38,6 @@ bool sdl_init()
   prev_time = SDL_GetTicks();
   
   int_bind("draw_line", draw_line_f);
-  int_bind("cos", cos_f);
-  int_bind("sin", sin_f);
   
   return true;
 }
@@ -102,20 +98,4 @@ bool draw_line_f(expr_t *ret_value, scope_t *scope_args)
   int_arg_load(scope_args, &y1, "y1");
   
   SDL_RenderDrawLine(sdl_renderer, x0.i32, y0.i32, x1.i32, y1.i32);
-}
-
-bool cos_f(expr_t *ret_value, scope_t *scope_args)
-{
-  expr_t theta;
-  int_arg_load(scope_args, &theta, "theta");
-  
-  expr_f32(ret_value, cos(theta.f32));
-}
-
-bool sin_f(expr_t *ret_value, scope_t *scope_args)
-{
-  expr_t theta;
-  int_arg_load(scope_args, &theta, "theta");
-  
-  expr_f32(ret_value, sin(theta.f32));
 }

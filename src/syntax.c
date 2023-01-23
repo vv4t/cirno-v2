@@ -78,7 +78,7 @@ static s_node_t *make_print(s_node_t *body);
 static s_node_t *make_ret_stmt(const lexeme_t *ret_token, s_node_t *body);
 static s_node_t *make_proc(s_node_t *base, s_node_t *arg, const lexeme_t *left_bracket);
 static s_node_t *make_arg(s_node_t *body, s_node_t *next);
-static s_node_t *make_array_init(const lexeme_t *array_init, s_node_t *type, s_node_t *size);
+static s_node_t *make_array_init(const lexeme_t *array_init, s_node_t *type, s_node_t *size, s_node_t *init);
 static s_node_t *make_post_op(s_node_t *lhs, const lexeme_t *op);
 static s_node_t *make_node(s_node_type_t type);
 
@@ -369,17 +369,24 @@ static s_node_t *s_binop(lex_t *lex, int op_set)
   if (!lhs)
     return NULL;
   
-  for (int i = 0; i < 8; i++) {
+  while (1) {
     const lexeme_t *op = NULL;
-    while ((op = lex_match(lex, op_set_table[op_set].op[i]))) {
-      s_node_t *rhs = s_binop(lex, op_set + 1);
-      if (!rhs) {
-        c_error(lex->lexeme, "expected 'expression' before '%l'", lex->lexeme);
-        s_err = true;
-      }
-      
-      lhs = make_binop(lhs, op, rhs);
+    for (int i = 0; i < 8; i++) {
+      op = lex_match(lex, op_set_table[op_set].op[i]);
+      if (op)
+        break;
     }
+    
+    if (!op)
+      break;
+    
+    s_node_t *rhs = s_binop(lex, op_set + 1);
+    if (!rhs) {
+      c_error(lex->lexeme, "expected 'expression' before '%l'", lex->lexeme);
+      s_err = true;
+    }
+    
+    lhs = make_binop(lhs, op, rhs);
   }
   
   return lhs;
@@ -420,10 +427,18 @@ static s_node_t *s_postfix(lex_t *lex)
       s_expect(lex, '<');
       s_node_t *type = s_type(lex);
       s_expect(lex, '>');
-      s_expect(lex, '(');
-      s_node_t *size = s_expect_rule(lex, R_EXPR);
-      s_expect(lex, ')');
-      return make_array_init(lexeme, type, size);
+      
+      s_node_t *init = NULL;
+      s_node_t *size = NULL;
+      if (lex_match(lex, '{')) {
+        init = s_expect_rule(lex, R_ARG);
+        s_expect(lex, '}');
+      } else if (s_expect(lex, '(')) {
+        s_node_t *size = s_expect_rule(lex, R_EXPR);
+        s_expect(lex, ')');
+      }
+      
+      return make_array_init(lexeme, type, size, init);
     } else {
       return base;
     }
@@ -675,12 +690,13 @@ static s_node_t *make_new(const lexeme_t *class_ident)
   return node;
 }
 
-static s_node_t *make_array_init(const lexeme_t *array_init, s_node_t *type, s_node_t *size)
+static s_node_t *make_array_init(const lexeme_t *array_init, s_node_t *type, s_node_t *size, s_node_t *init)
 {
   s_node_t *node = make_node(S_ARRAY_INIT);
   node->array_init.array_init = array_init;
   node->array_init.type = type;
   node->array_init.size = size;
+  node->array_init.init = init;
   return node;
 }
 
@@ -783,6 +799,7 @@ static void s_print_node_R(const s_node_t *node, int pad)
     LOG_DEBUG("%*sS_ARRAY_INIT", pad, "");
     s_print_node_R(node->array_init.type, pad + 2);
     s_print_node_R(node->array_init.size, pad + 2);
+    s_print_node_R(node->array_init.init, pad + 2);
     break;
   case S_POST_OP:
     LOG_DEBUG("%*sS_POST_OP", pad, "");
@@ -877,6 +894,7 @@ void s_free(s_node_t *node)
   case S_ARRAY_INIT:
     s_free(node->array_init.type);
     s_free(node->array_init.size);
+    s_free(node->array_init.init);
     break;
   case S_POST_OP:
     s_free(node->post_op.lhs);

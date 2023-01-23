@@ -1,0 +1,65 @@
+#include "lib/math.9c"
+#include "lib/sdl.9c"
+
+class_def bob {
+  f32 u;
+  f32 u_t;
+  
+  fn init(f32 u, f32 u_t) : class bob
+  {
+    this.u = u;
+    this.u_t = u_t;
+    return this;
+  }
+};
+
+class bob[] bob_arr = array_init<class bob>(32);
+
+bob_arr[0] = new bob.init(0.0, 0.0);
+
+for (i32 i = 0; i < 4; i++) {
+  f32 theta = i * 0.125 * M_PI;
+  f32 h = 20;
+  bob_arr[i + 1] = new bob.init(h * sin(theta), -h * cos(theta));
+}
+
+for (i32 i = 5; i < bob_arr.length; i++)
+  bob_arr[i] = new bob.init(0.0, 0.0);
+
+f32 c = 1.0;
+f32 d_t = 0.15;
+
+fn update()
+{
+  for (i32 i = 1; i < bob_arr.length - 1; i++) {
+    f32 du_dx_1 = bob_arr[i + 1].u - bob_arr[i].u;
+    f32 du_dx_2 = bob_arr[i].u - bob_arr[i - 1].u;
+    
+    f32 d2u_dx2 = du_dx_1 - du_dx_2;
+    
+    bob_arr[i].u_t += c * d2u_dx2 * d_t;
+  }
+  
+  for (i32 i = 0; i < bob_arr.length; i++)
+    bob_arr[i].u += bob_arr[i].u_t * d_t;
+  
+  draw_bob();
+}
+
+fn draw_bob()
+{
+  for (i32 i = 0; i < bob_arr.length; i++) {
+    draw_circle(
+      320 - bob_arr.length * 5 + i * 10,
+      240 + bob_arr[i].u,
+      5);
+  }
+  
+  for (i32 i = 1; i < bob_arr.length; i++) {
+    draw_line(
+      320 - bob_arr.length * 5 + (i - 1) * 10,
+      240 + bob_arr[i - 1].u,
+      320 - bob_arr.length * 5 + i * 10,
+      240 + bob_arr[i].u);
+  }
+}

@@ -8,10 +8,10 @@ build: run
 demo: $(cli_demo) $(sdl_demo)
 
 cirno: src/*.c src/*.h
-	gcc src/*.c -lm -lSDL2 -o cirno
+	gcc src/*.c -lm -lSDL2 -g -o cirno
 
 run: cirno
-	./cirno -w demo/main.9c
+	./cirno demo/main.9c
 
 demo/cli/%:
 	./cirno $@

@@ -117,6 +117,7 @@ typedef struct s_node_s {
       const lexeme_t *array_init;
       struct s_node_s *type;
       struct s_node_s *size;
+      struct s_node_s *init;
     } array_init;
     struct {
       const lexeme_t *op;
