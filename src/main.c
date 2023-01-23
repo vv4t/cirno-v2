@@ -64,5 +64,7 @@ int main(int argc, char *argv[])
   s_free(node);
   lex_free(&lex);
   
+  zone_log();
+  
   return 0;
 }

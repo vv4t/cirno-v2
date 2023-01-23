@@ -13,4 +13,30 @@ class_def vec2 {
     this.y = y;
     return this;
   }
+  
+  fn add(class vec2 v) : class vec2
+  {
+    this.x += v.x;
+    this.y += v.y;
+    return this;
+  }
+  
+  fn sub(class vec2 v) : class vec2
+  {
+    this.x -= v.x;
+    this.y -= v.y;
+    return this;
+  }
+  
+  fn mulf(f32 v) : class vec2
+  {
+    this.x *= v;
+    this.y *= v;
+    return this;
+  }
+  
+  fn copy() : class vec2
+  {
+    return new vec2.init(this.x, this.y);
+  }
 };

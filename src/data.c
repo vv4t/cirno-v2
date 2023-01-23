@@ -125,7 +125,13 @@ var_t *class_find_var(const scope_t *class, const char *ident)
   return map_get(&class->map_var, ident);
 }
 
-void scope_new(scope_t *scope, const char *ident, const type_t *ret_type, scope_t *scope_parent, const scope_t *scope_find)
+void scope_new(
+  scope_t       *scope,
+  const char    *ident,
+  const type_t  *ret_type,
+  scope_t       *scope_parent,
+  const scope_t *scope_find,
+  bool          block)
 {
   if (scope_parent)
     scope_parent->scope_child = scope;
@@ -142,6 +148,9 @@ void scope_new(scope_t *scope, const char *ident, const type_t *ret_type, scope_
   scope->ret_flag = false;
   scope->ret_type = *ret_type;
   scope->ret_value = (expr_t) {0};
+  
+  scope->block = block;
+  
   scope->size = 0;
 }
 
@@ -157,6 +166,17 @@ void scope_free(scope_t *scope)
 
 var_t *scope_add_var(scope_t *scope, const type_t *type, const char *ident)
 {
+  const scope_t *scope_find = scope;
+  while (scope_find) {
+    if (map_get(&scope->map_var, ident))
+      return NULL;
+    
+    if (scope_find->block)
+      break;
+    
+    scope_find = scope->scope_find;
+  }
+  
   var_t *var = ZONE_ALLOC(sizeof(var_t));
   var->type = *type;
   var->loc = scope->size;

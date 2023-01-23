@@ -13,13 +13,14 @@ typedef struct heap_block_s {
   struct heap_block_s *prev;
 } heap_block_t;
 
-static heap_block_t  *heap_block_list = NULL;
-static heap_block_t  *heap_alloc(int size);
+static heap_block_t *heap_block_list = NULL;
+static heap_block_t *heap_alloc(int size);
 static void         heap_clean();
 static void         heap_clean_R(scope_t *scope);
 static void         heap_clean_class(heap_block_t *heap_block, const scope_t *class);
 static void         heap_clean_array_class(heap_block_t *heap_block, const scope_t *class);
 static void         heap_clean_var(var_t *var);
+static void         heap_clean_expr(expr_t *expr);
 
 static scope_t  scope_global;
 
@@ -30,6 +31,7 @@ static int  mem_stack_end = 256;
 
 static bool int_fn(scope_t *scope, const s_node_t *node, const scope_t *scope_class);
 static bool int_body(scope_t *scope, const s_node_t *node);
+static bool int_body_scope(scope_t *scope, const s_node_t *node);
 static bool int_stmt(scope_t *scope, const s_node_t *node);
 static bool int_print(scope_t *scope, const s_node_t *node);
 static bool int_ret_stmt(scope_t *scope, const s_node_t *node);
@@ -56,25 +58,12 @@ static bool int_load_ident(const scope_t *scope, heap_block_t *heap_block, expr_
 
 void int_init()
 {
-  scope_new(&scope_global, NULL, &type_none, NULL, NULL);
+  scope_new(&scope_global, NULL, &type_none, NULL, NULL, false);
 }
 
 bool int_run(const s_node_t *node)
 {
-  const s_node_t *head = node;
-  
-  while (head) {
-    if (!int_stmt(&scope_global, head)) {
-      scope_free(&scope_global);
-      scope_global.scope_child = NULL;
-      heap_clean();
-      return false;
-    }
-    
-    head = head->stmt.next;
-  }
-  
-  return true;
+  return int_body(&scope_global, node);
 }
 
 void int_stop()
@@ -94,7 +83,7 @@ bool int_call(const char *ident, expr_t *arg_list, int num_arg_list)
   }
   
   scope_t new_scope;
-  scope_new(&new_scope, NULL, &fn->type, &scope_global, fn->scope_parent);
+  scope_new(&new_scope, NULL, &fn->type, &scope_global, fn->scope_parent, true);
   new_scope.size += scope_global.size;
   
   int arg_num = 0;
@@ -163,21 +152,26 @@ bool int_arg_load(const scope_t *scope, expr_t *expr, char *ident)
 
 bool int_body(scope_t *scope, const s_node_t *node)
 {
-  scope_t new_scope;
-  scope_new(&new_scope, NULL, &scope->ret_type, scope, scope);
-  new_scope.size = scope->size;
-  
   const s_node_t *head = node;
-  while (head && !new_scope.ret_flag) {
-    if (!int_stmt(&new_scope, head)) {
-      scope_free(&new_scope);
-      scope->scope_child = NULL;
-      heap_clean();
+  
+  while (head && !scope->ret_flag) {
+    if (!int_stmt(scope, head))
       return false;
-    }
     
     head = head->stmt.next;
   }
+  
+  return true;
+}
+
+bool int_body_scope(scope_t *scope, const s_node_t *node)
+{
+  scope_t new_scope;
+  scope_new(&new_scope, NULL, &scope->ret_type, scope, scope, false);
+  new_scope.size = scope->size;
+  
+  if (!int_body(&new_scope, node))
+    return false;
   
   scope->ret_flag = new_scope.ret_flag;
   scope->ret_value = new_scope.ret_value;
@@ -295,7 +289,7 @@ bool int_while_stmt(scope_t *scope, const s_node_t *node)
     return false;
   
   while (cond.i32 != 0) {
-    if (!int_body(scope, node->while_stmt.body))
+    if (!int_body_scope(scope, node->while_stmt.body))
       return false;
     
     if (!int_expr(scope, &cond, node->while_stmt.cond))
@@ -307,27 +301,39 @@ bool int_while_stmt(scope_t *scope, const s_node_t *node)
 
 bool int_for_stmt(scope_t *scope, const s_node_t *node)
 {
+  scope_t new_scope;
+  scope_new(&new_scope, NULL, &scope->ret_type, scope, scope, false);
+  new_scope.size = scope->size;
+  
   if (node->for_stmt.decl) {
-    if (!int_stmt(scope, node->for_stmt.decl))
+    if (!int_stmt(&new_scope, node->for_stmt.decl))
       return false;
   }
   
   expr_t cond;
-  if (!int_expr(scope, &cond, node->for_stmt.cond))
+  if (!int_expr(&new_scope, &cond, node->for_stmt.cond))
     return false;
   
   while (cond.i32 != 0) {
-    if (!int_body(scope, node->for_stmt.body))
+    if (!int_body_scope(&new_scope, node->for_stmt.body))
       return false;
     
     if (node->for_stmt.inc) {
-      if (!int_expr(scope, &cond, node->for_stmt.inc))
+      if (!int_expr(&new_scope, &cond, node->for_stmt.inc))
         return false;
     }
     
-    if (!int_expr(scope, &cond, node->for_stmt.cond))
+    if (!int_expr(&new_scope, &cond, node->for_stmt.cond))
       return false;
   }
+  
+  scope->ret_flag = new_scope.ret_flag;
+  scope->ret_value = new_scope.ret_value;
+  
+  heap_clean();
+  
+  scope_free(&new_scope);
+  scope->scope_child = NULL;
   
   return true;
 }
@@ -339,7 +345,7 @@ bool int_if_stmt(scope_t *scope, const s_node_t *node)
     return false;
   
   if (cond.i32 != 0) {
-    if (!int_body(scope, node->if_stmt.body))
+    if (!int_body_scope(scope, node->if_stmt.body))
       return false;
   }
   
@@ -393,7 +399,7 @@ bool int_class_def(scope_t *scope, const s_node_t *node)
   }
   
   scope_t class;
-  scope_new(&class, node->class_def.ident->data.ident, &type_none, NULL, scope);
+  scope_new(&class, node->class_def.ident->data.ident, &type_none, NULL, scope, true);
   scope_t *class_scope = scope_add_class(scope, node->class_def.ident->data.ident, &class);
   
   s_node_t *head = node->class_def.class_decl;
@@ -420,16 +426,19 @@ bool int_class_def(scope_t *scope, const s_node_t *node)
 
 bool int_decl(scope_t *scope, const s_node_t *node, bool init)
 {
-  if (scope_find_var(scope, node->decl.ident->data.ident)) {
-    c_error(node->decl.ident, "redefinition of '%s'", node->decl.ident->data.ident);
-    return false;
-  }
-  
   type_t type;
   if (!int_type(scope, &type, node->decl.type))
     return false;
   
   var_t *var = scope_add_var(scope, &type, node->decl.ident->data.ident);
+  if (!var) {
+    c_error(
+      node->decl.ident,
+      "redefinition of '%s'",
+      node->decl.ident->data.ident);
+    return false;
+  }
+  
   if (init) {
     expr_t expr;
     if (node->decl.init) {
@@ -556,9 +565,8 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
   }
   
   scope_t new_scope;
-  
   if (fn->scope_class) {
-    scope_new(&new_scope, NULL, &fn->type, scope, fn->scope_parent->scope_find);
+    scope_new(&new_scope, NULL, &fn->type, scope, fn->scope_parent->scope_find, true);
     new_scope.size += scope->size;
     
     expr_t self_expr;
@@ -572,7 +580,7 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
     var_t *var = scope_add_var(&new_scope, &self_expr.type, "this");
     mem_assign(mem_stack, var->loc, &var->type, &self_expr);
   } else {
-    scope_new(&new_scope, NULL, &fn->type, scope, fn->scope_parent);
+    scope_new(&new_scope, NULL, &fn->type, scope, fn->scope_parent, true);
     new_scope.size += scope->size;
   }
   
@@ -593,9 +601,11 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
     if (!int_type(&new_scope, &type, head->param_decl.type))
       return false;
     
+    scope->size += new_scope.size;
     expr_t arg_value;
     if (!int_expr(scope, &arg_value, arg->arg.body))
       return false;
+    scope->size -= new_scope.size;
     
     if (!expr_cast(&arg_value, &type)) {
       c_error(
@@ -606,15 +616,14 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
       return false;
     }
     
-    if (scope_find_var(&new_scope, head->param_decl.ident->data.ident)) {
+    var_t *var = scope_add_var(&new_scope, &type, head->param_decl.ident->data.ident);
+    if (!var) {
       c_error(
         head->param_decl.ident,
         "redefinition of param '%s'",
         head->param_decl.ident->data.ident);
       return false;
     }
-    
-    var_t *var = scope_add_var(&new_scope, &type, head->param_decl.ident->data.ident);
     mem_assign(mem_stack, var->loc, &var->type, &arg_value);
     
     head = head->param_decl.next;
@@ -883,10 +892,6 @@ bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node)
 static bool array_direct(expr_t *expr, const s_node_t *node, const expr_t *base)
 {
   heap_block_t *heap_block = (heap_block_t*) base->align_of;
-  if (!heap_block->use) {
-    LOG_ERROR("use of deallocated block");
-    return false;
-  }
   
   if (strcmp(node->direct.child_ident->data.ident, "length") == 0) {
     expr_i32(expr, heap_block->size / type_size_base(&base->type));
@@ -927,11 +932,6 @@ bool int_direct(scope_t *scope, expr_t *expr, const s_node_t *node)
   }
   
   heap_block_t *heap_block = (heap_block_t*) base.align_of;
-  if (!heap_block->use) {
-    LOG_ERROR("use of deallocated block");
-    return false;
-  }
-  
   if (!int_load_ident(base.type.class, heap_block, expr, node->direct.child_ident)) {
     c_error(
       node->direct.child_ident,
@@ -971,12 +971,6 @@ bool int_index(scope_t *scope, expr_t *expr, const s_node_t *node)
   int offset = index.i32 * type_size_base(&base.type);
   
   heap_block_t *heap_block = (heap_block_t*) base.align_of;
-  
-  if (!heap_block->use) {
-    LOG_ERROR("use of deallocated block");
-    return false;
-  }
-  
   if (!heap_block) {
     c_error(
       node->index.left_bracket,
@@ -1239,18 +1233,21 @@ static void heap_clean()
   
   heap_block = heap_block_list;
   while (heap_block) {
-    if (!heap_block->use) {
-      if (heap_block->next)
-        heap_block->next->prev = heap_block->prev;
-      if (heap_block->prev)
-        heap_block->prev->next = heap_block->next;
-      
-      if (heap_block == heap_block_list)
-        heap_block_list = heap_block->next;
-      
-      ZONE_FREE(heap_block->block);
-      ZONE_FREE(heap_block);
+    if (heap_block->use) {
+      heap_block = heap_block->next;
+      continue;
     }
+    
+    if (heap_block->next)
+      heap_block->next->prev = heap_block->prev;
+    if (heap_block->prev)
+      heap_block->prev->next = heap_block->next;
+    
+    if (heap_block == heap_block_list)
+      heap_block_list = heap_block->next;
+    
+    ZONE_FREE(heap_block->block);
+    ZONE_FREE(heap_block);
     
     heap_block = heap_block->next;
   }
@@ -1260,6 +1257,9 @@ static void heap_clean_R(scope_t *scope)
 {
   if (!scope)
     return;
+  
+  if (scope->ret_flag)
+    heap_clean_expr(&scope->ret_value);
   
   entry_t *entry = scope->map_var.start;
   while (entry) {
@@ -1299,18 +1299,24 @@ static void heap_clean_var(var_t *var)
   if (var->type.spec == SPEC_CLASS || var->type.spec == SPEC_STRING || var->type.arr) {
     expr_t expr;
     mem_load(mem_stack, var->loc, &var->type, &expr);
-    
-    heap_block_t *heap_block = (heap_block_t*) expr.align_of;
+    heap_clean_expr(&expr);
+  }
+}
+
+static void heap_clean_expr(expr_t *expr)
+{
+  if (expr->type.spec == SPEC_CLASS || expr->type.spec == SPEC_STRING || expr->type.arr) {
+    heap_block_t *heap_block = (heap_block_t*) expr->align_of;
     
     if (!heap_block)
       return;
     
     heap_block->use = true;
-    if (var->type.spec == SPEC_CLASS) {
-      if (var->type.arr)
-        heap_clean_array_class(heap_block, var->type.class);
+    if (expr->type.spec == SPEC_CLASS) {
+      if (expr->type.arr)
+        heap_clean_array_class(heap_block, expr->type.class);
       else
-        heap_clean_class(heap_block, var->type.class);
+        heap_clean_class(heap_block, expr->type.class);
     }
   }
 }

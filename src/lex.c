@@ -176,7 +176,7 @@ bool lex_parse(lex_t *lex, const char *src)
     .start = body
   };
   
-  memcpy(lex->file, lex_file.file, sizeof(lex_file.file));
+  memcpy(&lex->file[0], &lex_file.file[0], sizeof(lex_file.file));
   
   ZONE_FREE(buffer);
   
@@ -256,7 +256,7 @@ static char *filename(lex_file_t *lex)
   while (*lex->c != '"' && *lex->c != 0 && *lex->c != '\n');
   
   if (*lex->c == 0 || *lex->c == '\n') {
-    printf("%s:%i:error: missing terminating '\"'\n", lex->file, lex->line);
+    printf("%s:%i:error: missing terminating '\"'\n", lex->file[0], lex->line);
     return NULL;
   }
   
@@ -271,10 +271,11 @@ static char *filename(lex_file_t *lex)
   if (slash) {
     int dir_len = slash - lex->file[0];
     int total_len = dir_len + str_len;
-    char *file_dir_concat = ZONE_ALLOC(total_len);
-    memcpy(file_dir_concat, lex->file, dir_len);
+    char *file_dir_concat = ZONE_ALLOC(total_len + 1);
+    memcpy(file_dir_concat, lex->file[0], dir_len);
     file_dir_concat[dir_len] = '/';
     memcpy(&file_dir_concat[dir_len + 1], file, str_len);
+    file_dir_concat[total_len + 1] = 0;
     
     ZONE_FREE(file);
     file = file_dir_concat;
@@ -294,7 +295,7 @@ static lexeme_t *match_include(lex_file_t *lex)
     
     lex_t include_file;
     if (!lex_parse(&include_file, file)) {
-      printf("%s:%i:error: could not open '%s'\n", lex->file, lex->line, file);
+      printf("%s:%i:error: could not open '%s'\n", lex->file[0], lex->line, file);
       return NULL;
     }
     
@@ -381,7 +382,7 @@ static lexeme_t *match_string_literal(lex_file_t *lex)
   while (*lex->c != '"' && *lex->c != 0);
   
   if (*lex->c == 0) {
-    printf("%s:%i:error: missing terminating '\"'\n", lex->file, lex->line);
+    printf("%s:%i:error: missing terminating '\"'\n", lex->file[0], lex->line);
     return NULL;
   }
   
@@ -389,7 +390,8 @@ static lexeme_t *match_string_literal(lex_file_t *lex)
   lex->c++;
   
   char *string_literal = ZONE_ALLOC(str_len + 1);
-  strncpy(string_literal, str_start + 1, str_len);
+  memcpy(string_literal, str_start + 1, str_len);
+  string_literal[str_len] = 0;
   
   lexeme_t *lexeme = make_lexeme(TK_STRING_LITERAL, lex);
   lexeme->data.string_literal = string_literal;

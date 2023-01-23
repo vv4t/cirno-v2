@@ -49,6 +49,8 @@ struct scope_s {
   expr_t  ret_value;
   bool    ret_flag;
   
+  bool    block;
+  
   int     size;
 };
 
@@ -91,7 +93,8 @@ extern void     scope_new(
   const char    *ident,
   const type_t  *ret_type,
   scope_t       *scope_parent,
-  const scope_t *scope_find);
+  const scope_t *scope_find,
+  bool          block);
 
 extern void     scope_free(scope_t *scope);
 

@@ -1,0 +1,16 @@
+i32 n = 32;
+i32[] prime = array_init<i32>(n);
+
+for (i32 i = 0; i < n; i++)
+  prime[i] = 1;
+
+for (i32 p = 2; p*p < n; p++) {
+  if (prime[p] > 0) {
+    for (i32 i = p * p; i < n; i += p)
+      prime[i] = 0;
+  }
+}
+
+for (i32 i = 0; i < n; i++)
+  if (prime[i] > 0)
+    print i;

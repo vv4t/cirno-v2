@@ -3,26 +3,21 @@
 
 f32 t = 0;
 
-f32 x_c = 30;
-f32 y_c = 30;
+f32 x = -40;
+f32 x0 = -30;
 
-f32 u_c = 4;
-f32 v_c = 4;
+f32 v = 0;
+
+f32 k = 0.5;
+
+f32 d_t = 0.015;
 
 fn update()
 {
-  x_c += u_c;
-  y_c += v_c;
+  v += -k * (x - x0) * d_t;
+  x += v * 0.015;
   
-  if (x_c - 15 < 0 || x_c + 15 > 640)
-    u_c = -u_c;
+  draw_line(320, 240, 320, 240 - x);
   
-  if (y_c - 15 < 0 || y_c + 15 > 480)
-    v_c = -v_c;
-  
-  draw_circle(x_c, y_c, 15);
-  draw_circle(x_c, y_c, 15);
-  draw_circle(x_c, y_c, 5);
-  
-  t += 0.15;
+  t += d_t;
 }
