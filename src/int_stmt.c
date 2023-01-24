@@ -7,7 +7,6 @@ bool int_body(scope_t *scope, const s_node_t *node)
   bool cont_flag = scope->cont_flag;
   bool break_flag = scope->break_flag;
   
-  
   while (head && !scope->ret_flag) {
     if (cont_flag && !scope->cont_flag)
       break;
