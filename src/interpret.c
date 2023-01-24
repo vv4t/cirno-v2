@@ -28,6 +28,7 @@ static bool int_stmt(scope_t *scope, const s_node_t *node);
 static bool int_print(scope_t *scope, const s_node_t *node);
 static bool int_ret_stmt(scope_t *scope, const s_node_t *node);
 static bool int_if_stmt(scope_t *scope, const s_node_t *node);
+static bool int_ctrl_stmt(scope_t *scope, const s_node_t *node);
 static bool int_while_stmt(scope_t *scope, const s_node_t *node);
 static bool int_for_stmt(scope_t *scope, const s_node_t *node);
 static bool int_decl(scope_t *scope, const s_node_t *node, bool init);
@@ -115,7 +116,10 @@ err_cleanup:
     return false;
   }
   
-  int_body(&new_scope, fn->node);
+  if (!int_body(&new_scope, fn->node)) {
+    scope_free(&new_scope);
+    return false;
+  }
   
   scope_free(&new_scope);
   
@@ -148,7 +152,17 @@ bool int_body(scope_t *scope, const s_node_t *node)
 {
   const s_node_t *head = node;
   
+  bool cont_flag = scope->cont_flag;
+  bool break_flag = scope->break_flag;
+  
+  
   while (head && !scope->ret_flag) {
+    if (cont_flag && !scope->cont_flag)
+      break;
+    
+    if (break_flag && !scope->break_flag)
+      break;
+    
     if (!int_stmt(scope, head))
       return false;
     
@@ -162,6 +176,8 @@ bool int_body_scope(scope_t *scope, const s_node_t *node)
 {
   scope_t new_scope;
   scope_new(&new_scope, NULL, &scope->ret_type, scope, scope, false);
+  new_scope.cont_flag = scope->cont_flag;
+  new_scope.break_flag = scope->break_flag;
   new_scope.size = scope->size;
   
   if (!int_body(&new_scope, node)) {
@@ -171,9 +187,10 @@ bool int_body_scope(scope_t *scope, const s_node_t *node)
   }
   
   scope->ret_flag = new_scope.ret_flag;
-  scope->ret_value = new_scope.ret_value;
+  scope->cont_flag = new_scope.cont_flag;
+  scope->break_flag = new_scope.break_flag;
   
-  heap_clean();
+  scope->ret_value = new_scope.ret_value;
   
   scope_free(&new_scope);
   scope->scope_child = NULL;
@@ -229,9 +246,13 @@ bool int_stmt(scope_t *scope, const s_node_t *node)
     if (!int_ret_stmt(scope, node->stmt.body))
       return false;
     break;
+  case S_CTRL_STMT:
+    if (!int_ctrl_stmt(scope, node->stmt.body))
+      return false;
+    break;
   default:
     LOG_ERROR("unknown statement node_type (%i)", node->stmt.body->node_type);
-    break;
+    return false;
   }
   
   return true;
@@ -281,17 +302,35 @@ bool int_fn(scope_t *scope, const s_node_t *node, const scope_t *scope_class)
 
 bool int_while_stmt(scope_t *scope, const s_node_t *node)
 {
+  scope_t new_scope;
+  scope_new(&new_scope, NULL, &scope->ret_type, scope, scope, false);
+  new_scope.cont_flag = true;
+  new_scope.break_flag = true;
+  new_scope.size = scope->size;
+  
   expr_t cond;
   if (!int_expr(scope, &cond, node->while_stmt.cond))
     return false;
   
   while (cond.i32 != 0) {
-    if (!int_body_scope(scope, node->while_stmt.body))
+    if (!int_body(&new_scope, node->while_stmt.body))
       return false;
     
-    if (!int_expr(scope, &cond, node->while_stmt.cond))
+    if (!new_scope.break_flag)
+      break;
+    
+    if (!int_expr(scope, &cond, node->while_stmt.cond)) {
+err_cleanup:
+      scope_free(&new_scope);
+      scope->scope_child = NULL;
       return false;
+    }
   }
+  
+  scope->ret_flag = new_scope.ret_flag;
+  scope->ret_value = new_scope.ret_value;
+  scope_free(&new_scope);
+  scope->scope_child = NULL;
   
   return true;
 }
@@ -300,6 +339,8 @@ bool int_for_stmt(scope_t *scope, const s_node_t *node)
 {
   scope_t new_scope;
   scope_new(&new_scope, NULL, &scope->ret_type, scope, scope, false);
+  new_scope.cont_flag = true;
+  new_scope.break_flag = true;
   new_scope.size = scope->size;
   
   if (node->for_stmt.decl) {
@@ -330,11 +371,34 @@ err_cleanup:
   
   scope->ret_flag = new_scope.ret_flag;
   scope->ret_value = new_scope.ret_value;
-  
-  heap_clean();
-  
   scope_free(&new_scope);
   scope->scope_child = NULL;
+  
+  return true;
+}
+
+bool int_ctrl_stmt(scope_t *scope, const s_node_t *node)
+{
+  switch (node->ctrl_stmt.lexeme->token) {
+  case TK_BREAK:
+    if (!scope->break_flag) {
+      c_error(
+        node->ctrl_stmt.lexeme,
+        "cannot break outside loop");
+      return false;
+    }
+    scope->break_flag = false;
+    break;
+  case TK_CONTINUE:
+    if (!scope->break_flag) {
+      c_error(
+        node->ctrl_stmt.lexeme,
+        "cannot continue outside loop");
+      return false;
+    }
+    scope->cont_flag= false;
+    break;
+  }
   
   return true;
 }
@@ -875,6 +939,8 @@ bool int_binop(scope_t *scope, expr_t *expr, const s_node_t *node)
       default:
         goto err_no_op;
       }
+    } else if (type_cmp(&lhs.type, &type_string) && type_cmp(&rhs.type, &type_string)) {
+      
     } else if ((type_class(&lhs.type) && type_class(&rhs.type))
     || (type_array(&lhs.type) && type_array(&rhs.type))
     || (type_cmp(&lhs.type, &type_string) && type_cmp(&rhs.type, &type_string))

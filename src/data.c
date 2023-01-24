@@ -143,9 +143,12 @@ void scope_new(
   map_new(&scope->map_class);
   map_new(&scope->map_fn);
   
-  scope->ret_flag = false;
   scope->ret_type = *ret_type;
   scope->ret_value = (expr_t) {0};
+  
+  scope->ret_flag = false;
+  scope->cont_flag = false;
+  scope->break_flag = false;
   
   scope->block = block;
   

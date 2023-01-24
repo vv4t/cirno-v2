@@ -11,7 +11,7 @@ cirno: src/*.c src/*.h
 	gcc src/*.c -lm -lSDL2 -g -o cirno
 
 run: cirno
-	./cirno demo/main.9c
+	./cirno -w demo/sdl/bounce.9c
 
 demo/cli/%:
 	./cirno $@

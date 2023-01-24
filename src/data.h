@@ -56,7 +56,10 @@ struct scope_s {
   
   type_t  ret_type;
   expr_t  ret_value;
+  
   bool    ret_flag;
+  bool    cont_flag;
+  bool    break_flag;
   
   bool    block;
   

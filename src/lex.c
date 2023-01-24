@@ -36,6 +36,8 @@ static word_t word_table[] = {
   { "string",     TK_STRING     },
   { "array_init", TK_ARRAY_INIT },
   { "for",        TK_FOR        },
+  { "break",      TK_BREAK      },
+  { "continue",   TK_CONTINUE   },
   { "if",         TK_IF         }
 };
 

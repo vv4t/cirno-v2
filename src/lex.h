@@ -35,6 +35,8 @@ typedef enum {
   TK_MUL_ASSIGN,
   TK_DIV_ASSIGN,
   TK_FOR,
+  TK_BREAK,
+  TK_CONTINUE,
   TK_EOF
 } token_t;
 

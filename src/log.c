@@ -231,7 +231,9 @@ static void token_print(token_t token)
     "-=",             // TK_SUB_ASSIGN
     "*=",             // TK_MUL_ASSIGN
     "/=",             // TK_DIV_ASSIGN
-    "for",            // TK_FOR
+    "for",            // TK_FOR,
+    "break",          // TK_BREAK,
+    "continue",       // TK_CONTINUE,
     "EOF"             // TK_EOF
   };
   
