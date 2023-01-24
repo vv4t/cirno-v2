@@ -76,6 +76,7 @@ typedef struct s_node_s {
     struct {
       struct s_node_s *cond;
       struct s_node_s *body;
+      struct s_node_s *next;
     } if_stmt;
     struct {
       const lexeme_t  *ret_token;

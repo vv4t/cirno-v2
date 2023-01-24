@@ -2,7 +2,7 @@
 #include "sdl.h"
 #include "lex.h"
 #include "syntax.h"
-#include "interpret.h"
+#include "int_main.h"
 #include "lib.h"
 #include <unistd.h>
 #include <stdio.h>

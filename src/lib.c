@@ -1,7 +1,7 @@
 #include "lib.h"
 
 #include "data.h"
-#include "interpret.h"
+#include "int_main.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>

@@ -6,7 +6,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-typedef struct scope_s scope_t;
+typedef struct scope_s  scope_t;
+typedef struct fn_s     fn_t;
 
 typedef struct heap_block_s {
   char  *block;
@@ -34,13 +35,14 @@ typedef struct {
 
 typedef struct {
   union {
-    int     i32;
-    float   f32;
-    size_t  align_of;
+    int           i32;
+    float         f32;
+    heap_block_t  *block;
+    fn_t          *fn;
   };
-  int     loc_offset;
-  char    *loc_base;
-  type_t  type;
+  int           loc_offset;
+  heap_block_t  *loc_base;
+  type_t        type;
 } expr_t;
 
 struct scope_s {
@@ -74,7 +76,7 @@ typedef struct {
 
 typedef bool (*xaction_t)(expr_t *ret_value, scope_t *scope_args);
 
-typedef struct {
+typedef struct fn_s {
   s_node_t      *node;
   s_node_t      *param;
   type_t        type;

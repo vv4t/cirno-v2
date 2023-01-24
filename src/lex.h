@@ -37,6 +37,7 @@ typedef enum {
   TK_FOR,
   TK_BREAK,
   TK_CONTINUE,
+  TK_ELSE,
   TK_EOF
 } token_t;
 

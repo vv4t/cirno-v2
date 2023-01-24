@@ -38,6 +38,7 @@ static word_t word_table[] = {
   { "for",        TK_FOR        },
   { "break",      TK_BREAK      },
   { "continue",   TK_CONTINUE   },
+  { "else",       TK_ELSE       },
   { "if",         TK_IF         }
 };
 

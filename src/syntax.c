@@ -64,7 +64,7 @@ static s_node_t *s_expect_rule(lex_t *lex, rule_t rule);
 static s_node_t *make_fn(const lexeme_t *fn_ident, s_node_t *param_decl, s_node_t *type, s_node_t *body);
 static s_node_t *make_param_decl(s_node_t *type, const lexeme_t *ident, s_node_t *next);
 static s_node_t *make_stmt(s_node_t *body, s_node_t *next);
-static s_node_t *make_if_stmt(s_node_t *cond, s_node_t *body);
+static s_node_t *make_if_stmt(s_node_t *cond, s_node_t *body, s_node_t *next);
 static s_node_t *make_ctrl_stmt(const lexeme_t *lexeme);
 static s_node_t *make_while_stmt(s_node_t *cond, s_node_t *body);
 static s_node_t *make_for_stmt(s_node_t *decl, s_node_t *cond, s_node_t *inc, s_node_t *body);
@@ -296,7 +296,11 @@ static s_node_t *s_if_stmt(lex_t *lex)
   
   s_node_t *body = s_expect_rule(lex, R_BODY);
   
-  return make_if_stmt(cond, body);
+  s_node_t *next = NULL;
+  if (lex_match(lex, TK_ELSE))
+    next = s_expect_rule(lex, R_BODY);
+  
+  return make_if_stmt(cond, body, next);
 }
 
 static s_node_t *s_print(lex_t *lex)
@@ -569,11 +573,12 @@ static s_node_t *make_ctrl_stmt(const lexeme_t *lexeme)
   return node;
 }
 
-static s_node_t *make_if_stmt(s_node_t *cond, s_node_t *body)
+static s_node_t *make_if_stmt(s_node_t *cond, s_node_t *body, s_node_t *next)
 {
   s_node_t *node = make_node(S_IF_STMT);
   node->if_stmt.cond = cond;
   node->if_stmt.body = body;
+  node->if_stmt.next = next;
   return node;
 }
 
@@ -739,7 +744,7 @@ static s_node_t *make_node(s_node_type_t node_type)
 static void s_print_node_R(const s_node_t *node, int pad)
 {
   if (!node) {
-    LOG_DEBUG("%*s", pad, "-");
+    LOG_DEBUG("%*s-", pad, "");
     return;
   }
   
@@ -778,6 +783,7 @@ static void s_print_node_R(const s_node_t *node, int pad)
     LOG_DEBUG("%*sS_IF_STMT", pad, "");
     s_print_node_R(node->if_stmt.cond, pad + 2);
     s_print_node_R(node->if_stmt.body, pad + 2);
+    s_print_node_R(node->if_stmt.next, pad + 2);
     break;
   case S_UNARY:
     LOG_DEBUG("%*sS_UNARY", pad, "");
@@ -886,6 +892,7 @@ void s_free(s_node_t *node)
   case S_IF_STMT:
     s_free(node->if_stmt.cond);
     s_free(node->if_stmt.body);
+    s_free(node->if_stmt.next);
     break;
   case S_UNARY:
     s_free(node->unary.rhs);

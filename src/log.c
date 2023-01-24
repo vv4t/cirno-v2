@@ -140,16 +140,16 @@ static void expr_print(const expr_t *expr)
     break;
   case SPEC_CLASS:
     type_print(&expr->type);
-    printf(" [ %p ]", expr->align_of);
+    printf(" [ %p ]", expr->block);
     break;
   case SPEC_FN:
     printf("fn:");
-    fn_t *fn = (fn_t*) expr->align_of;
+    fn_t *fn = (fn_t*) expr->block;
     if (fn)
       type_print(&fn->type);
     break;
   case SPEC_STRING:
-    printf("%s", (char*) (*(heap_block_t*) expr->align_of).block);
+    printf("%s", (char*) (*(heap_block_t*) expr->block).block);
     break;
   }
 }
@@ -234,6 +234,7 @@ static void token_print(token_t token)
     "for",            // TK_FOR,
     "break",          // TK_BREAK,
     "continue",       // TK_CONTINUE,
+    "else",           // TK_ELSE,
     "EOF"             // TK_EOF
   };
   

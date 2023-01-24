@@ -5,13 +5,13 @@ sdl_demo=$(wildcard demo/sdl/*.9c)
 
 build: run
 
-demo: $(cli_demo) $(sdl_demo)
+demo: cirno $(cli_demo) $(sdl_demo)
 
 cirno: src/*.c src/*.h
 	gcc src/*.c -lm -lSDL2 -g -o cirno
 
 run: cirno
-	./cirno -w demo/sdl/bounce.9c
+	./cirno demo/main.9c
 
 demo/cli/%:
 	./cirno $@

@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-#include "interpret.h"
+#include "int_main.h"
 #include <stdbool.h>
 #include <SDL2/SDL.h>
 #include <math.h>
