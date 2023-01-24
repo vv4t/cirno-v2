@@ -83,6 +83,7 @@ typedef struct fn_s {
   xaction_t     xaction;
   const scope_t *scope_parent;
   const scope_t *scope_class;
+  bool          is_new;
 } fn_t;
 
 extern type_t type_none;
@@ -124,7 +125,8 @@ extern fn_t     *scope_add_fn(
   s_node_t      *node,
   xaction_t     xaction,
   const scope_t *scope_class,
-  const char    *ident);
+  const char    *ident,
+  bool          is_new);
 
 extern fn_t     *scope_find_fn(const scope_t *scope, const char *ident);
 

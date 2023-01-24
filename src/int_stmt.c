@@ -109,48 +109,6 @@ bool int_stmt(scope_t *scope, const s_node_t *node)
   return true;
 }
 
-bool int_fn(scope_t *scope, const s_node_t *node, const scope_t *scope_class)
-{
-  if (node->fn.body) {
-    if (scope_find_fn(scope, node->fn.fn_ident->data.ident)) {
-      c_error(node->fn.fn_ident, "redefinition of function '%s'", node->fn.fn_ident->data.ident);
-      return false;
-    }
-  }
-  
-  type_t type = type_none;
-  if (node->fn.type) {
-    if (!int_type(scope, &type, node->fn.type))
-      return false;
-  }
-  
-  if (!node->fn.body) {
-    fn_t *fn = scope_find_fn(scope, node->fn.fn_ident->data.ident);
-    
-    if (!fn) {
-      c_error(
-        node->fn.fn_ident,
-        "bodyless function is unboud '%s'",
-        node->fn.fn_ident->data.ident);
-      return false;
-    }
-    
-    fn->type = type;
-    fn->param = node->fn.param_decl;
-  } else {
-    scope_add_fn(
-      scope,
-      &type,
-      node->fn.param_decl,
-      node->fn.body,
-      NULL,
-      scope_class,
-      node->fn.fn_ident->data.ident);
-  }
-  
-  return true;
-}
-
 bool int_while_stmt(scope_t *scope, const s_node_t *node)
 {
   scope_t new_scope;

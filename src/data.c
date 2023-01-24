@@ -230,7 +230,8 @@ fn_t *scope_add_fn(
   s_node_t      *node,
   xaction_t     xaction,
   const scope_t *scope_class,
-  const char    *ident)
+  const char    *ident,
+  bool          is_new)
 {
   fn_t *fn = ZONE_ALLOC(sizeof(fn_t));
   fn->node = node;
@@ -239,6 +240,7 @@ fn_t *scope_add_fn(
   fn->type = *type;
   fn->scope_parent = scope;
   fn->scope_class = scope_class;
+  fn->is_new = is_new;
   
   map_put(&scope->map_fn, ident, fn);
   

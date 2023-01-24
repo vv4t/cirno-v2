@@ -26,6 +26,7 @@ typedef enum {
   S_NEW,
   S_ARRAY_INIT,
   S_POST_OP,
+  S_CLASS_NEW,
   S_ARG
 } s_node_type_t;
 
@@ -115,6 +116,10 @@ typedef struct s_node_s {
     struct {
       const lexeme_t  *class_ident;
     } new;
+    struct {
+      struct s_node_s *param_decl;
+      struct s_node_s *body;
+    } class_new;
     struct {
       const lexeme_t  *array_init;
       struct s_node_s *type;

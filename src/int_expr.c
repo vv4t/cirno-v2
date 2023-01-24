@@ -141,7 +141,20 @@ err_cleanup:
     fn->xaction(&new_scope.ret_value, &new_scope);
   }
   
-  *expr = new_scope.ret_value;
+  if (fn->is_new) {
+    expr_t self_expr;
+    self_expr.type.spec = SPEC_CLASS;
+    self_expr.type.arr = false;
+    self_expr.type.class = fn->scope_class;
+    self_expr.block = base.loc_base;
+    self_expr.loc_base = NULL;
+    self_expr.loc_offset = 0;
+    
+    *expr = self_expr;
+  } else {
+    *expr = new_scope.ret_value;
+  }
+  
   scope_free(&new_scope);
   scope->scope_child = NULL;
   
@@ -537,11 +550,19 @@ bool int_new(scope_t *scope, expr_t *expr, const s_node_t *node)
     return false;
   }
   
-  expr->type.spec = SPEC_CLASS;
+  fn_t *fn = scope_find_fn(class, "+new");
+  if (!fn) {
+    LOG_ERROR("class has no constructor");
+    return false;
+  }
+  
+  heap_block_t *heap_block = heap_alloc(class->size);
+  
+  expr->type.spec = SPEC_FN;
   expr->type.arr = false;
-  expr->type.class = class;
-  expr->block = heap_alloc(class->size);
-  expr->loc_base = NULL;
+  expr->type.class = NULL;
+  expr->fn = fn;
+  expr->loc_base = heap_block;
   expr->loc_offset = 0;
   
   return true;

@@ -90,7 +90,8 @@ void int_bind(const char *ident, xaction_t xaction)
     NULL,
     xaction,
     NULL,
-    ident);
+    ident,
+    false);
 }
 
 bool int_arg_load(const scope_t *scope, expr_t *expr, char *ident)

@@ -7,11 +7,10 @@ class_def vec2 {
   f32 x;
   f32 y;
   
-  fn init(f32 x, f32 y) : class vec2
+  new(f32 x, f32 y)
   {
     this.x = x;
     this.y = y;
-    return this;
   }
   
   fn add(class vec2 v) : class vec2
@@ -37,6 +36,6 @@ class_def vec2 {
   
   fn copy() : class vec2
   {
-    return new vec2.init(this.x, this.y);
+    return new vec2(this.x, this.y);
   }
 };

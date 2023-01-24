@@ -1,21 +1,16 @@
-i32 n = 5;
-i32[] data = array_init<i32>(n);
-
-data[0] = 10;
-data[1] = 1;
-data[2] = 23;
-data[3] = 5;
-data[4] = 4;
-
-for (i32 i = 0; i < n; i++) {
-  for (i32 j = 0; j < n - i - 1; j++) {
-    if (data[j] > data[j + 1]) {
-      i32 tmp = data[j];
-      data[j] = data[j + 1];
-      data[j + 1] = tmp;
-    }
+class_def test {
+  f32 a;
+  f32 b;
+  
+  new()
+  {
+    this.a = 4.0;
+    this.b = 6.0;
+    print "HI";
   }
-}
+};
 
-for (i32 i = 0; i < n; i++)
-  print data[i];
+class test wow = new test();
+
+print wow.a;
+print wow.b;

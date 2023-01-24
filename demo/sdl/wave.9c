@@ -5,26 +5,25 @@ class_def bob {
   f32 u;
   f32 u_t;
   
-  fn init(f32 u, f32 u_t) : class bob
+  new(f32 u, f32 u_t)
   {
     this.u = u;
     this.u_t = u_t;
-    return this;
   }
 };
 
 class bob[] bob_arr = array_init<class bob>(32);
 
-bob_arr[0] = new bob.init(0.0, 0.0);
+bob_arr[0] = new bob(0.0, 0.0);
 
 for (i32 i = 0; i < 4; i++) {
   f32 theta = i * 0.125 * M_PI;
   f32 h = 20;
-  bob_arr[i + 1] = new bob.init(h * sin(theta), -h * cos(theta));
+  bob_arr[i + 1] = new bob(h * sin(theta), -h * cos(theta));
 }
 
 for (i32 i = 5; i < bob_arr.length; i++)
-  bob_arr[i] = new bob.init(0.0, 0.0);
+  bob_arr[i] = new bob(0.0, 0.0);
 
 f32 c = 1.0;
 f32 d_t = 0.15;
