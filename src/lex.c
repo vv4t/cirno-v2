@@ -4,6 +4,7 @@
 #include "zone.h"
 #include <ctype.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 
 typedef struct {
@@ -256,8 +257,52 @@ static lexeme_t *make_lexeme(token_t token, const lex_file_t *lex)
   return lexeme;
 }
 
+static char *proc_filename(lex_file_t *lex)
+{
+  if (*lex->c != '<')
+    return NULL;
+  
+  const char *str_start = lex->c + 1;
+  int str_len = 0;
+  
+  do
+    lex->c++;
+  while (*lex->c != '>' && *lex->c != 0 && *lex->c != '\n');
+  
+  if (*lex->c == 0 || *lex->c == '\n') {
+    printf("%s:%i:error: missing terminating '>'\n", lex->file, lex->line);
+    return NULL;
+  }
+  
+  str_len = lex->c - str_start;
+  lex->c++;
+  
+  char lib_name[256];
+  strncpy(lib_name, str_start, str_len);
+  lib_name[str_len] = 0;
+  
+  char exec_path[256];
+  int exec_len = readlink("/proc/self/exe", exec_path, 256);
+  exec_path[exec_len] = 0;
+  
+  char *slash = strrchr(exec_path, '/');
+  *slash = 0;
+  
+  char lib_path[256];
+  int lib_len = sprintf(lib_path, "%s/lib/%s.9c", exec_path, lib_name);
+  
+  char *file_path = ZONE_ALLOC(lib_len + 1);
+  strncpy(file_path, lib_path, lib_len);
+  file_path[lib_len] = 0;
+  
+  return file_path;
+}
+
 static char *filename(lex_file_t *lex)
 {
+  if (*lex->c == '<')
+    return proc_filename(lex);
+  
   if (*lex->c != '"')
     return NULL;
   

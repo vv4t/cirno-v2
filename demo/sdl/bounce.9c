@@ -1,5 +1,5 @@
-#include "../lib/math.9c"
-#include "../lib/sdl.9c"
+#include <math>
+#include <sdl>
 
 f32 t = 0;
 
