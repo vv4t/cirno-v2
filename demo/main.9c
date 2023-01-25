@@ -1,16 +1,4 @@
-class_def test {
-  f32 a;
-  f32 b;
-  
-  new()
-  {
-    this.a = 4.0;
-    this.b = 6.0;
-    print "HI";
-  }
-};
+#include "lib/stdlib.9c"
 
-class test wow = new test();
-
-print wow.a;
-print wow.b;
+string a = input("> ");
+print a;
