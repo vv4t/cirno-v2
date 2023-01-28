@@ -60,6 +60,8 @@ int main(int argc, char *argv[])
     if (int_run(node)) {
       if (flag_sdl)
         while (sdl_frame());
+    } else {
+      printf("cirno: failed to run '%s'\n", file);
     }
     
     int_stop();

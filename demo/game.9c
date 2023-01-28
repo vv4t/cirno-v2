@@ -1,4 +1,4 @@
-#include "lib/stdlib.9c"
+#include <stdlib>
 
 i32 map_width = 20;
 

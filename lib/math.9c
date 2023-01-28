@@ -1,5 +1,7 @@
 fn cos(f32 theta);
 fn sin(f32 theta);
+fn sqrt(f32 x);
+fn pow(f32 x, f32 y);
 
 f32 M_PI = 3.14159;
 
@@ -11,6 +13,16 @@ class_def vec2 {
   {
     this.x = x;
     this.y = y;
+  }
+  
+  fn length() : f32
+  {
+    return sqrt(this.dot(this));
+  }
+  
+  fn dot(class vec2 v) : f32
+  {
+    return this.x * v.x + this.y * v.y;
   }
   
   fn add(class vec2 v) : class vec2

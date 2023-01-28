@@ -86,17 +86,17 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
         node->proc.left_bracket,
         "too few arguments to function '%h'",
         node);
-      return false;
+      goto err_cleanup;
     }
     
     type_t type;
     if (!int_type(&new_scope, &type, head->param_decl.type))
-      return false;
+      goto err_cleanup;
     
     scope->size += new_scope.size;
     expr_t arg_value;
     if (!int_expr(scope, &arg_value, arg->arg.body))
-      return false;
+      goto err_cleanup;
     scope->size -= new_scope.size;
     
     if (!expr_cast(&arg_value, &type)) {
@@ -105,7 +105,7 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
         "expected '%z' but argument is of type '%z'",
         &type,
         &arg_value.type);
-      return false;
+      goto err_cleanup;
     }
     
     var_t *var = scope_add_var(&new_scope, &type, head->param_decl.ident->data.ident);
@@ -114,7 +114,7 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
         head->param_decl.ident,
         "redefinition of param '%s'",
         head->param_decl.ident->data.ident);
-      return false;
+      goto err_cleanup;
     }
     mem_assign(stack_mem, var->loc, &var->type, &arg_value);
     
@@ -127,7 +127,7 @@ bool int_proc(scope_t *scope, expr_t *expr, const s_node_t *node)
       node->proc.left_bracket,
       "too many arguments to function '%h'",
       node);
-    return false;
+    goto err_cleanup;
   }
   
   if (fn->node) {

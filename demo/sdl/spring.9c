@@ -18,9 +18,12 @@ fn update()
   x += (x - p_x) + 0.5 * a * d_t * d_t;
   p_x = x;
   
+  t += d_t;
+}
+
+fn draw()
+{
   draw_line(320, 240, 320, 240 - x);
   draw_circle(320, 240 - x0, 5);
   draw_circle(320, 240 - x, 5);
-  
-  t += d_t;
 }

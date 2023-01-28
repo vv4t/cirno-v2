@@ -41,11 +41,9 @@ fn update()
   
   for (i32 i = 0; i < bob_arr.length; i++)
     bob_arr[i].u += bob_arr[i].u_t * d_t;
-  
-  draw_bob();
 }
 
-fn draw_bob()
+fn draw()
 {
   for (i32 i = 0; i < bob_arr.length; i++) {
     draw_circle(

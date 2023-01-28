@@ -35,6 +35,14 @@ bool getch_f(expr_t *ret_value, scope_t *scope_args)
   expr_i32(ret_value, getch());
 }
 
+bool sqrt_f(expr_t *ret_value, scope_t *scope_args)
+{
+  expr_t x;
+  int_arg_load(scope_args, &x, "x");
+  
+  expr_f32(ret_value, sqrt(x.f32));
+}
+
 bool cos_f(expr_t *ret_value, scope_t *scope_args)
 {
   expr_t theta;
@@ -49,6 +57,17 @@ bool sin_f(expr_t *ret_value, scope_t *scope_args)
   int_arg_load(scope_args, &theta, "theta");
   
   expr_f32(ret_value, sin(theta.f32));
+}
+
+bool pow_f(expr_t *ret_value, scope_t *scope_args)
+{
+  expr_t x;
+  int_arg_load(scope_args, &x, "x");
+  
+  expr_t y;
+  int_arg_load(scope_args, &y, "y");
+  
+  expr_f32(ret_value, powf(x.f32, y.f32));
 }
 
 bool input_f(expr_t *ret_value, scope_t *scope_args)
@@ -78,4 +97,6 @@ void lib_load_math()
 {
   int_bind("cos", cos_f);
   int_bind("sin", sin_f);
+  int_bind("pow", pow_f);
+  int_bind("sqrt", sqrt_f);
 }

@@ -1,0 +1,69 @@
+#include <sdl>
+#include <math>
+
+fn linear_interp(class vec2 a, class vec2 b, f32 t) : class vec2
+{
+  return a.copy().add(b.copy().sub(a).mulf(t));
+}
+
+fn bezier_interp_R(class vec2[] curve, i32 i, i32 n, f32 t) : class vec2
+{
+  if (n == 1) {
+    return linear_interp(curve[i], curve[i + 1], t);
+  } else if (n == 2) {
+    class vec2 a = linear_interp(curve[i], curve[i + 1], t);
+    class vec2 b = linear_interp(curve[i + 1], curve[i + 2], t);
+    
+    return linear_interp(a, b, t);
+  } else {
+    i32 n_a = n / 2;
+    i32 n_b = n - n_a;
+    
+    class vec2 a = bezier_interp_R(curve, i, n_a, t);
+    class vec2 b = bezier_interp_R(curve, i + n_a, n_b, t);
+    
+    return linear_interp(a, b, t);
+  }
+}
+
+fn bezier_interp(class vec2[] curve, f32 t) : class vec2
+{
+  return bezier_interp_R(curve, 0, curve.length - 1, t);
+}
+
+class vec2[] main_curve = array_init<class vec2> {
+  new vec2(10, 10),
+  new vec2(300, 10),
+  new vec2(300, 100),
+  new vec2(10, 100),
+  new vec2(10, 200),
+  new vec2(200, 200),
+  new vec2(200, 250)
+};
+
+fn draw_curve(class vec2[] curve)
+{
+  for (i32 i = 0; i < curve.length - 1; i++)
+    draw_line(curve[i].x, curve[i].y, curve[i + 1].x, curve[i + 1].y);
+}
+
+f32 time = 0;
+
+fn update()
+{
+  time += 0.005;
+  main_curve[3].x += cos(time);
+  main_curve[6].x += cos(time + 3);
+  main_curve[6].y -= cos(time + 300);
+}
+
+fn draw()
+{
+  for (i32 i = 0; i < 10; i++) {
+    f32 interp = i * 0.1;
+    
+    class vec2 p = bezier_interp(main_curve, interp);
+    draw_circle(p.x, p.y, 5);
+    draw_curve(main_curve);
+  }
+}

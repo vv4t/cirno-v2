@@ -1,0 +1,78 @@
+#include <sdl>
+
+f32 ORBIT_SCALE = 0.05;
+f32 PLANET_SCALE = 0.0002;
+
+f32 time = 0;
+
+class_def planet {
+  f32 d1;
+  f32 d2;
+  f32 T;
+  f32 R;
+  
+  new(f32 d1, f32 d2, f32 T, f32 R)
+  {
+    this.d1 = d1;
+    this.d2 = d2;
+    this.T = T;
+    this.R = R;
+  }
+  
+  fn draw()
+  {
+    f32 theta = time / this.T;
+    
+    class vec2 pos = fn_ellipse(500, 240, this.d1 * ORBIT_SCALE, this.d2 * ORBIT_SCALE, theta);
+    draw_circle(pos.x, pos.y, this.R * PLANET_SCALE);
+    draw_ellipse(500, 240, this.d1 * ORBIT_SCALE, this.d2 * ORBIT_SCALE);
+  }
+};
+
+fn fn_ellipse(f32 x, f32 y, f32 d1, f32 d2, f32 theta) : class vec2
+{
+  f32 xp = x - d2 + d1 / 2.0 + cos(theta) * d2;
+  f32 yp = y + sin(theta) * d1;
+  
+  return new vec2(xp, yp);
+}
+
+fn draw_ellipse(f32 x, f32 y, f32 d1, f32 d2)
+{
+  f32 N = 36;
+  f32 d_deg = 2 * M_PI / N;
+  
+  for (i32 i = 0; i < N; i++) {
+    class vec2 a = fn_ellipse(x, y, d1, d2, i * d_deg);
+    class vec2 b = fn_ellipse(x, y, d1, d2, (i + 1) * d_deg);
+    
+    draw_line(a.x, a.y, b.x, b.y);
+  }
+}
+
+class planet mercury = new planet(  46.0,     69.8, 88.0,     4879 * 0.5    );
+class planet venus = new planet(    107.5,    108.9,  224.8,  12104 * 0.5   );
+class planet earth = new planet(    147.1,    152.1,  365.2,  12756 * 0.5   );
+class planet mars = new planet(     206.7,    249.3,  687.0,  6792 * 0.5    );
+class planet jupiter = new planet(  740.6,    816.4,  4331,   142984 * 0.5  );
+class planet saturn = new planet(   1357.6,   1506.5, 10747,  120536 * 0.5  );
+class planet uranus = new planet(   2732.7,   3001.4, 30589,  51118 * 0.5   );
+class planet neptune = new planet(  4471.1,   4558.9, 59800,  49528 * 0.5   );
+class planet pluto = new planet(    4436.8,   7375.9, 90560,  2376 * 0.5    );
+
+fn update()
+{
+  time += 100;
+}
+
+fn draw()
+{
+  mercury.draw();
+  venus.draw();
+  earth.draw();
+  jupiter.draw();
+  saturn.draw();
+  uranus.draw();
+  neptune.draw();
+  pluto.draw();
+}

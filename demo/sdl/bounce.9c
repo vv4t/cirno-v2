@@ -20,9 +20,12 @@ fn update()
   if (y_c - 15 < 0 || y_c + 15 > 480)
     v_c = -v_c;
   
+  t += 0.15;
+}
+
+fn draw()
+{
   draw_circle(x_c, y_c, 15);
   draw_circle(x_c, y_c, 10);
   draw_circle(x_c, y_c, 5);
-  
-  t += 0.15;
 }

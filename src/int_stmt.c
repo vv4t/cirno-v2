@@ -223,7 +223,7 @@ bool int_if_stmt(scope_t *scope, const s_node_t *node)
       return false;
   } else {
     if (node->if_stmt.next)
-      return int_stmt(scope, node->if_stmt.next);
+      return int_body(scope, node->if_stmt.next);
   }
   
   return true;

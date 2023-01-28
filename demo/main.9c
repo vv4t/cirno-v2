@@ -1,3 +1,8 @@
-#include <stdlib>
+i32 i = 10;
 
-print input("Hi");
+if (i == 4)
+  print "ok";
+else {
+  print "ok";
+  print "wow";
+}

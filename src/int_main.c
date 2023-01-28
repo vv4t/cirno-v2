@@ -66,12 +66,11 @@ bool int_call(const char *ident, expr_t *arg_list, int num_arg_list)
   
   if (arg_num < num_arg_list) {
     LOG_ERROR("%s(): too many arguments", ident);
-err_cleanup:
-    scope_free(&new_scope);
-    return false;
+    goto err_cleanup;
   }
   
   if (!int_body(&new_scope, fn->node)) {
+err_cleanup:
     scope_free(&new_scope);
     return false;
   }

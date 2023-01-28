@@ -72,16 +72,18 @@ void zone_free(void *block)
 
 void zone_log()
 {
-  LOG_DEBUG("num_zone_block: %i", num_zone_block);
-  
-  zone_block_t *zone_block = zone_block_list;
-  while (zone_block) {
-    LOG_DEBUG(
-      "%s:%i %ib",
-      zone_block->src,
-      zone_block->line,
-      zone_block->size);
+  if (num_zone_block > 0) {
+    LOG_DEBUG("num_zone_block: %i", num_zone_block);
     
-    zone_block = zone_block->next;
+    zone_block_t *zone_block = zone_block_list;
+    while (zone_block) {
+      LOG_DEBUG(
+        "%s:%i %ib",
+        zone_block->src,
+        zone_block->line,
+        zone_block->size);
+      
+      zone_block = zone_block->next;
+    }
   }
 }
