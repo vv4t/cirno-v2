@@ -43,8 +43,15 @@ class vec2[] main_curve = array_init<class vec2> {
 
 fn draw_curve(class vec2[] curve)
 {
-  for (i32 i = 0; i < curve.length - 1; i++)
-    draw_line(curve[i].x, curve[i].y, curve[i + 1].x, curve[i + 1].y);
+  i32 N = 36 - 1;
+  f32 step = 1.0 / (N + 1);
+  
+  for (i32 i = 0; i < N; i++) {
+    class vec2 a = bezier_interp(curve, i * step);
+    class vec2 b = bezier_interp(curve, (i + 1) * step);
+    
+    draw_line(a.x, a.y, b.x, b.y);
+  }
 }
 
 f32 time = 0;
@@ -56,12 +63,5 @@ fn update()
 
 fn draw()
 {
-  i32 N = 10;
-  for (i32 i = 0; i < N; i++) {
-    f32 interp = i * 1.0 / N;
-    
-    class vec2 p = bezier_interp(main_curve, interp);
-    draw_circle(p.x, p.y, 5);
-    draw_curve(main_curve);
-  }
+  draw_curve(main_curve);
 }
