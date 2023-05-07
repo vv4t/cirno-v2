@@ -1,0 +1,9 @@
+#include <math>
+
+class vec2 u = new vec2(2, -3);
+class vec2 v = new vec2(4, 3);
+class vec2 w = new vec2(0, 1);
+
+class vec2 r = u.sub(v.mulf(3)).add(w.mulf(4));
+
+print r.x, r.y;

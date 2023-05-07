@@ -1,0 +1,538 @@
+#include <sdl>
+#include <math>
+
+fn linear_interp(class vec2 a, class vec2 b, f32 t) : class vec2
+{
+  return a.copy().add(b.copy().sub(a).mulf(t));
+}
+
+fn cubic_interp(class vec2[] curve, i32 i, f32 t) : class vec2
+{
+  class vec2 a_b = linear_interp(curve[i + 0], curve[i + 1], t);
+  class vec2 b_c = linear_interp(curve[i + 1], curve[i + 2], t);
+  class vec2 c_d = linear_interp(curve[i + 2], curve[i + 3], t);
+  
+  class vec2 ab_bc = linear_interp(a_b, b_c, t);
+  class vec2 bc_cd = linear_interp(b_c, c_d, t);
+  
+  return linear_interp(ab_bc, bc_cd, t);
+}
+
+fn draw_curve(class vec2[] curve)
+{
+  i32 N = 12;
+  f32 step = 1.0 / N;
+  
+  for (i32 i = 0; i < curve.length; i += 4) {
+    for (i32 j = 0; j < N; j++) {
+      class vec2 a = cubic_interp(curve, i, j * step);
+      class vec2 b = cubic_interp(curve, i, (j + 1) * step);
+      
+      draw_line(a.x, a.y, b.x, b.y);
+    }
+  }
+}
+
+f32 time = 0;
+
+fn update()
+{
+  time += 1.0;
+}
+
+fn draw()
+{
+  draw_curve(curve_1);
+  draw_curve(curve_2);
+  draw_curve(curve_3);
+  draw_curve(curve_4);
+  draw_curve(curve_5);
+  draw_curve(curve_6);
+  draw_curve(curve_7);
+  draw_curve(curve_8);
+  draw_curve(curve_9);
+  draw_curve(curve_10);
+  draw_curve(curve_11);
+  draw_curve(curve_12);
+  draw_curve(curve_13);
+  draw_curve(curve_14);
+  draw_curve(curve_15);
+  draw_curve(curve_16);
+  draw_curve(curve_17);
+  draw_curve(curve_18);
+  draw_curve(curve_19);
+  draw_curve(curve_20);
+}
+
+class vec2[] curve_1 = array_init<class vec2> {
+  new vec2(137.6, 345.2),
+  new vec2(128, 343.2),
+  new vec2(116.4, 340),
+  new vec2(106.8, 331.2),
+  new vec2(106.8, 331.2),
+  new vec2(84.8, 311.6),
+  new vec2(78, 279.2),
+  new vec2(62.8, 287.6),
+  new vec2(62.8, 287.6),
+  new vec2(47.2, 296),
+  new vec2(47.6, 348.4),
+  new vec2(96.4, 364.4),
+  new vec2(96.4, 364.4),
+  new vec2(113.2, 370),
+  new vec2(128.4, 370),
+  new vec2(140.8, 369.6),
+  new vec2(140.8, 369.6),
+  new vec2(144, 369.6),
+  new vec2(171.6, 366.8),
+  new vec2(181.2, 353.2),
+  new vec2(181.2, 353.2),
+  new vec2(190.8, 339.6),
+  new vec2(184, 336),
+  new vec2(180.8, 334.4),
+  new vec2(180.8, 334.4),
+  new vec2(177.2, 332.4),
+  new vec2(151.2, 347.6),
+  new vec2(137.6, 345.2),
+};
+class vec2[] curve_2 = array_init<class vec2> {
+  new vec2(65.2, 288.4),
+  new vec2(57.2, 290.8),
+  new vec2(53.2, 307.6),
+  new vec2(57.2, 321.6),
+  new vec2(57.2, 321.6),
+  new vec2(61.2, 335.6),
+  new vec2(67.6, 342.8),
+  new vec2(72.8, 348),
+  new vec2(72.8, 348),
+  new vec2(72, 345.2),
+  new vec2(70.4, 336.4),
+  new vec2(77.2, 331.2),
+  new vec2(77.2, 331.2),
+  new vec2(85.6, 324.4),
+  new vec2(100.4, 328),
+  new vec2(100.4, 328),
+  new vec2(100.4, 328),
+  new vec2(100.4, 328),
+  new vec2(88, 312.8),
+  new vec2(81.6, 302),
+  new vec2(81.6, 302),
+  new vec2(75.2, 292.8),
+  new vec2(73.2, 286.8),
+  new vec2(65.2, 288.4),
+};
+class vec2[] curve_3 = array_init<class vec2> {
+  new vec2(200.8, 376),
+  new vec2(193.6, 380.8),
+  new vec2(168.8, 398.4),
+  new vec2(137.2, 408.4),
+  new vec2(137.2, 408.4),
+  new vec2(137.2, 408.4),
+  new vec2(135.6, 408.8),
+  new vec2(135.6, 408.8),
+  new vec2(135.6, 408.8),
+  new vec2(134, 409.2),
+  new vec2(133.2, 411.2),
+  new vec2(134, 412.8),
+  new vec2(134, 412.8),
+  new vec2(140.8, 422.4),
+  new vec2(153.2, 441.6),
+  new vec2(131.2, 448.4),
+  new vec2(131.2, 448.4),
+  new vec2(110, 455.2),
+  new vec2(70.4, 398.8),
+  new vec2(87.2, 384),
+  new vec2(87.2, 384),
+  new vec2(94.8, 378.4),
+  new vec2(101.6, 381.2),
+  new vec2(105.2, 382.8),
+  new vec2(105.2, 382.8),
+  new vec2(107.2, 383.6),
+  new vec2(109.2, 383.6),
+  new vec2(111.2, 383.2),
+  new vec2(111.2, 383.2),
+  new vec2(116, 381.6),
+  new vec2(124.8, 378.4),
+  new vec2(131.6, 374.8),
+  new vec2(131.6, 374.8),
+  new vec2(148.8, 366),
+  new vec2(152.8, 362.4),
+  new vec2(160.8, 356.4),
+  new vec2(160.8, 356.4),
+  new vec2(168.8, 350.4),
+  new vec2(187.2, 335.6),
+  new vec2(202, 348.4),
+  new vec2(202, 348.4),
+  new vec2(214.8, 359.2),
+  new vec2(207.6, 371.2),
+  new vec2(200.8, 376),
+};
+class vec2[] curve_4 = array_init<class vec2> {
+  new vec2(264.4, 292.8),
+  new vec2(266.4, 294.4),
+  new vec2(290.8, 323.2),
+  new vec2(298.8, 316),
+  new vec2(298.8, 316),
+  new vec2(308.4, 307.6),
+  new vec2(321.6, 291.2),
+  new vec2(336, 304.4),
+  new vec2(336, 304.4),
+  new vec2(350.4, 317.6),
+  new vec2(323.2, 340),
+  new vec2(311.6, 346),
+  new vec2(311.6, 346),
+  new vec2(284, 358.4),
+  new vec2(261.6, 334.8),
+  new vec2(256.8, 328.4),
+  new vec2(256.8, 328.4),
+  new vec2(252, 322),
+  new vec2(243.6, 311.2),
+  new vec2(243.6, 300.8),
+  new vec2(243.6, 300.8),
+  new vec2(244, 289.6),
+  new vec2(257.6, 286.8),
+  new vec2(264.4, 292.8),
+};
+class vec2[] curve_5 = array_init<class vec2> {
+  new vec2(234.8, 356.8),
+  new vec2(239.6, 353.2),
+  new vec2(244.4, 347.2),
+  new vec2(250.8, 338),
+  new vec2(250.8, 338),
+  new vec2(256, 330.4),
+  new vec2(261.6, 315.6),
+  new vec2(261.6, 315.6),
+  new vec2(261.6, 315.6),
+  new vec2(265.2, 305.6),
+  new vec2(267.6, 286.4),
+  new vec2(254.4, 286.8),
+  new vec2(254.4, 286.8),
+  new vec2(245.6, 287.2),
+  new vec2(237.6, 286),
+  new vec2(224, 284),
+  new vec2(224, 284),
+  new vec2(200, 279.2),
+  new vec2(195.6, 276),
+  new vec2(185.6, 292.4),
+  new vec2(185.6, 292.4),
+  new vec2(174.8, 311.6),
+  new vec2(147.2, 325.6),
+  new vec2(181.2, 358.8),
+  new vec2(181.2, 358.8),
+  new vec2(181.2, 358.8),
+  new vec2(200.8, 374),
+  new vec2(224.4, 397.2),
+  new vec2(224.4, 397.2),
+  new vec2(240.4, 412.8),
+  new vec2(265.6, 435.2),
+  new vec2(274.4, 442.8),
+  new vec2(274.4, 442.8),
+  new vec2(276.4, 444.4),
+  new vec2(278.8, 445.2),
+  new vec2(281.2, 445.6),
+  new vec2(281.2, 445.6),
+  new vec2(320, 449.2),
+  new vec2(348.8, 445.2),
+  new vec2(348.8, 428),
+  new vec2(348.8, 428),
+  new vec2(348.8, 399.2),
+  new vec2(291.6, 409.2),
+  new vec2(291.6, 409.2),
+  new vec2(291.6, 409.2),
+  new vec2(291.6, 409.2),
+  new vec2(273.2, 393.6),
+  new vec2(264.8, 386),
+  new vec2(264.8, 386),
+  new vec2(264.8, 386),
+  new vec2(234.8, 356.8),
+  new vec2(234.8, 356.8),
+};
+class vec2[] curve_6 = array_init<class vec2> {
+  new vec2(252.4, 330),
+  new vec2(252.4, 330),
+  new vec2(260, 320),
+  new vec2(242.8, 309.2),
+  new vec2(242.8, 309.2),
+  new vec2(224.8, 297.6),
+  new vec2(218, 310.4),
+  new vec2(210.8, 320),
+  new vec2(210.8, 320),
+  new vec2(202.8, 332.4),
+  new vec2(210.8, 338.4),
+  new vec2(218.8, 345.6),
+  new vec2(218.8, 345.6),
+  new vec2(225.2, 351.6),
+  new vec2(231.2, 356.4),
+  new vec2(231.2, 356.4),
+  new vec2(231.2, 356.4),
+  new vec2(231.2, 356.4),
+  new vec2(243.6, 348),
+  new vec2(252.4, 330),
+};
+class vec2[] curve_7 = array_init<class vec2> {
+  new vec2(170.8, 323.6),
+  new vec2(179.6, 334.8),
+  new vec2(193.2, 348.8),
+  new vec2(176, 360.4),
+  new vec2(176, 360.4),
+  new vec2(152.4, 373.6),
+  new vec2(132.8, 333.6),
+  new vec2(128.8, 319.6),
+  new vec2(128.8, 319.6),
+  new vec2(125.2, 307.2),
+  new vec2(135.6, 299.2),
+  new vec2(144.4, 292.4),
+  new vec2(144.4, 292.4),
+  new vec2(161.6, 280),
+  new vec2(176, 268.8),
+  new vec2(192, 274.8),
+  new vec2(192, 274.8),
+  new vec2(212, 282),
+  new vec2(197.6, 298),
+  new vec2(187.6, 305.2),
+  new vec2(187.6, 305.2),
+  new vec2(181.6, 309.6),
+  new vec2(175.6, 314.4),
+  new vec2(171.2, 317.2),
+  new vec2(171.2, 317.2),
+  new vec2(170, 319.2),
+  new vec2(169.6, 321.6),
+  new vec2(170.8, 323.6),
+};
+class vec2[] curve_8 = array_init<class vec2> {
+  new vec2(262.4, 86),
+  new vec2(253.2, 84.4),
+  new vec2(243.6, 83.6),
+  new vec2(232.4, 84.4),
+  new vec2(232.4, 84.4),
+  new vec2(213.6, 85.2),
+  new vec2(195.6, 92),
+  new vec2(195.6, 92),
+  new vec2(195.6, 92),
+  new vec2(195.6, 92),
+  new vec2(147.2, 60.4),
+  new vec2(147.2, 60.4),
+  new vec2(147.2, 60.4),
+  new vec2(145.6, 59.6),
+  new vec2(143.6, 60.8),
+  new vec2(144, 62.4),
+  new vec2(144, 62.4),
+  new vec2(144, 62.4),
+  new vec2(152.4, 134),
+  new vec2(152.4, 134),
+  new vec2(152.4, 134),
+  new vec2(154.8, 130.8),
+  new vec2(110, 185.2),
+  new vec2(138.4, 230.8),
+  new vec2(138.4, 230.8),
+  new vec2(166.8, 276.4),
+  new vec2(227.2, 296.8),
+  new vec2(302.4, 282),
+  new vec2(302.4, 282),
+  new vec2(377.6, 267.2),
+  new vec2(395.2, 224),
+  new vec2(390.4, 201.2),
+  new vec2(390.4, 201.2),
+  new vec2(385.6, 178.4),
+  new vec2(357.2, 170),
+  new vec2(357.2, 170),
+  new vec2(357.2, 170),
+  new vec2(357.2, 170),
+  new vec2(356.8, 152),
+  new vec2(344, 130),
+  new vec2(344, 130),
+  new vec2(336.4, 116.8),
+  new vec2(310.8, 98),
+  new vec2(310.8, 98),
+  new vec2(310.8, 98),
+  new vec2(310.8, 98),
+  new vec2(300.4, 55.2),
+  new vec2(300.4, 55.2),
+  new vec2(300.4, 55.2),
+  new vec2(300, 53.6),
+  new vec2(298, 53.2),
+  new vec2(296.8, 54),
+  new vec2(296.8, 54),
+  new vec2(296.8, 54),
+  new vec2(262.4, 86),
+  new vec2(262.4, 86),
+};
+class vec2[] curve_9 = array_init<class vec2> {
+  new vec2(356, 171.6),
+  new vec2(356, 171.6),
+  new vec2(383.6, 178.8),
+  new vec2(388.4, 201.6),
+  new vec2(388.4, 201.6),
+  new vec2(393.2, 224.4),
+  new vec2(374, 265.6),
+  new vec2(299.6, 280),
+  new vec2(299.6, 280),
+  new vec2(202.8, 300),
+  new vec2(156.8, 242.4),
+  new vec2(183.6, 200),
+  new vec2(183.6, 200),
+  new vec2(210.4, 157.2),
+  new vec2(256.4, 193.6),
+  new vec2(290, 191.2),
+  new vec2(290, 191.2),
+  new vec2(318.8, 189.2),
+  new vec2(322, 164),
+  new vec2(356, 171.6),
+};
+class vec2[] curve_10 = array_init<class vec2> {
+  new vec2(230, 214.4),
+  new vec2(230, 212.8),
+  new vec2(231.6, 211.6),
+  new vec2(233.2, 212),
+  new vec2(233.2, 212),
+  new vec2(240.8, 214.8),
+  new vec2(262.4, 221.2),
+  new vec2(286.4, 222.8),
+  new vec2(286.4, 222.8),
+  new vec2(308, 224),
+  new vec2(320.8, 222.8),
+  new vec2(326.8, 221.6),
+  new vec2(326.8, 221.6),
+  new vec2(328.8, 221.2),
+  new vec2(330.4, 223.2),
+  new vec2(329.6, 225.2),
+  new vec2(329.6, 225.2),
+  new vec2(326, 236),
+  new vec2(310.8, 266),
+  new vec2(268.8, 263.6),
+  new vec2(268.8, 263.6),
+  new vec2(232.4, 259.6),
+  new vec2(228.8, 234),
+  new vec2(230, 214.4),
+};
+class vec2[] curve_11 = array_init<class vec2> {
+  new vec2(382, 191.6),
+  new vec2(382, 191.6),
+  new vec2(410.8, 191.2),
+  new vec2(429.6, 176),
+};
+class vec2[] curve_12 = array_init<class vec2> {
+  new vec2(383.6, 215.2),
+  new vec2(383.6, 215.2),
+  new vec2(399.2, 222.8),
+  new vec2(424.4, 220.8),
+};
+class vec2[] curve_13 = array_init<class vec2> {
+  new vec2(288.4, 180.8),
+  new vec2(296.8, 180.8),
+  new vec2(305.6, 181.6),
+  new vec2(306, 184.4),
+  new vec2(306, 184.4),
+  new vec2(306.4, 190),
+  new vec2(300.4, 201.2),
+  new vec2(294, 201.6),
+  new vec2(294, 201.6),
+  new vec2(286.8, 202.4),
+  new vec2(270, 192.4),
+  new vec2(270, 186),
+  new vec2(270, 186),
+  new vec2(269.6, 181.2),
+  new vec2(280.4, 180.8),
+  new vec2(288.4, 180.8),
+};
+class vec2[] curve_14 = array_init<class vec2> {
+  new vec2(108.4, 174.8),
+  new vec2(108.4, 174.8),
+  new vec2(142.8, 186),
+  new vec2(156.8, 198.4),
+};
+class vec2[] curve_15 = array_init<class vec2> {
+  new vec2(111.2, 214.8),
+  new vec2(111.2, 214.8),
+  new vec2(140.8, 219.2),
+  new vec2(158, 212.4),
+};
+class vec2[] curve_16 = array_init<class vec2> {
+  new vec2(335.6, 134),
+  new vec2(347.2, 152),
+  new vec2(347.6, 172.4),
+  new vec2(336.4, 179.6),
+  new vec2(336.4, 179.6),
+  new vec2(325.2, 186.8),
+  new vec2(306.8, 178.4),
+  new vec2(294.8, 160.4),
+  new vec2(294.8, 160.4),
+  new vec2(283.2, 142.4),
+  new vec2(282.8, 122),
+  new vec2(294, 114.8),
+  new vec2(294, 114.8),
+  new vec2(305.2, 107.2),
+  new vec2(324, 116),
+  new vec2(335.6, 134),
+};
+class vec2[] curve_17 = array_init<class vec2> {
+  new vec2(334, 156.8),
+  new vec2(334, 161.2),
+  new vec2(330.8, 164.8),
+  new vec2(326.8, 164.8),
+  new vec2(326.8, 164.8),
+  new vec2(322.8, 164.8),
+  new vec2(319.6, 161.2),
+  new vec2(319.6, 156.8),
+  new vec2(319.6, 156.8),
+  new vec2(319.6, 152.4),
+  new vec2(322.8, 148.8),
+  new vec2(326.8, 148.8),
+  new vec2(326.8, 148.8),
+  new vec2(330.8, 148.8),
+  new vec2(334, 152.4),
+  new vec2(334, 156.8),
+};
+class vec2[] curve_18 = array_init<class vec2> {
+  new vec2(236.4, 145.2),
+  new vec2(248.4, 162.8),
+  new vec2(247.6, 184.4),
+  new vec2(236.8, 192),
+  new vec2(236.8, 192),
+  new vec2(223.6, 199.6),
+  new vec2(206, 194),
+  new vec2(194, 176.4),
+  new vec2(194, 176.4),
+  new vec2(181.6, 158.8),
+  new vec2(180.8, 136),
+  new vec2(193.2, 127.2),
+  new vec2(193.2, 127.2),
+  new vec2(205.6, 118),
+  new vec2(224.4, 127.6),
+  new vec2(236.4, 145.2),
+};
+class vec2[] curve_19 = array_init<class vec2> {
+  new vec2(234, 168.4),
+  new vec2(234, 172.8),
+  new vec2(230.8, 176.4),
+  new vec2(226.8, 176.4),
+  new vec2(226.8, 176.4),
+  new vec2(222.8, 176.4),
+  new vec2(219.6, 172.8),
+  new vec2(219.6, 168.4),
+  new vec2(219.6, 168.4),
+  new vec2(219.6, 164),
+  new vec2(222.8, 160.4),
+  new vec2(226.8, 160.4),
+  new vec2(226.8, 160.4),
+  new vec2(230.8, 160.8),
+  new vec2(234, 164),
+  new vec2(234, 168.4),
+};
+class vec2[] curve_20 = array_init<class vec2> {
+  new vec2(234, 168.4),
+  new vec2(234, 172.8),
+  new vec2(230.8, 176.4),
+  new vec2(226.8, 176.4),
+  new vec2(226.8, 176.4),
+  new vec2(222.8, 176.4),
+  new vec2(219.6, 172.8),
+  new vec2(219.6, 168.4),
+  new vec2(219.6, 168.4),
+  new vec2(219.6, 164),
+  new vec2(222.8, 160.4),
+  new vec2(226.8, 160.4),
+  new vec2(226.8, 160.4),
+  new vec2(230.8, 160.8),
+  new vec2(234, 164),
+  new vec2(234, 168.4),
+};

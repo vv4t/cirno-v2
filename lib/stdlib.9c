@@ -1,2 +1,1 @@
-fn getch() : i32;
 fn input(string prompt) : string;

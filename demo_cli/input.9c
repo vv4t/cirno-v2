@@ -1,0 +1,5 @@
+#include <stdlib>
+
+string name = input("Name: ");
+
+print "Hi", name + "!";

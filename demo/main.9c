@@ -1,8 +1,0 @@
-i32 i = 10;
-
-if (i == 4)
-  print "ok";
-else {
-  print "ok";
-  print "wow";
-}

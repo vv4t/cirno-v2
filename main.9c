@@ -1,0 +1,22 @@
+#include <sdl>
+#include <math>
+
+fn update()
+{
+  0;
+}
+
+fn draw()
+{
+  class vec2 a = new vec2(100, 100);
+  class vec2 b = new vec2(60, 300);
+  
+  draw_line(0, 0, a.x, a.y);
+  draw_line(0, 0, b.x, b.y);
+  
+  for (i32 i = 0; i < 10; i++) {
+    class vec2 x = new vec2(70, 30 + i * 10);
+    class vec2 c = x.copy().mulf(a.dot(b) / (x.dot(b)));
+    draw_circle(c.x, c.y, 5);
+  }
+}
